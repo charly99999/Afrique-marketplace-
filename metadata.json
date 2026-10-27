@@ -1,0 +1,6 @@
+{
+  "name": "Afrique Business",
+  "description": "Afrique Business : Tout l'Afrique, un seul marché. Achetez et vendez facilement des produits, véhicules, biens immobiliers et services partout en Afrique.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

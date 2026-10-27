@@ -1,0 +1,18 @@
+[
+  {
+    "title": "Alerte : Jeton Facebook expiré (#190)",
+    "message": "Facebook Graph API [Code 190 / Sous-code 463 (OAuthException)] : Error validating access token: Session has expired on Monday, 26-Oct-26 20:00:00 PDT. The current time is Tuesday, 27-Oct-26 05:17:49 PDT.",
+    "type": "ERROR",
+    "id": "fb_notif_1793103469769_2iif",
+    "timestamp": "2026-10-27T12:17:49.769Z",
+    "read": false
+  },
+  {
+    "title": "Configuration Facebook requise",
+    "message": "Veuillez saisir votre Page ID et votre Jeton d’accès Page Facebook pour activer la synchronisation automatique.",
+    "type": "WARNING",
+    "id": "fb_notif_1793065426724_gbi0",
+    "timestamp": "2026-10-27T01:43:46.724Z",
+    "read": true
+  }
+]

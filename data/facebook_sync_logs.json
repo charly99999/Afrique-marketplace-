@@ -1,0 +1,28 @@
+[
+  {
+    "id": "log_1793103469769",
+    "timestamp": "2026-10-27T12:17:49.769Z",
+    "trigger": "manual",
+    "status": "error",
+    "importedCount": 0,
+    "importedListings": 0,
+    "importedPosts": 0,
+    "ignoredCount": 0,
+    "draftCount": 0,
+    "errorMessage": "Facebook Graph API [Code 190 / Sous-code 463 (OAuthException)] : Error validating access token: Session has expired on Monday, 26-Oct-26 20:00:00 PDT. The current time is Tuesday, 27-Oct-26 05:17:49 PDT.",
+    "details": "Graph API status HTTP 401 [Code 190 / Sous-code 463] : Error validating access token: Session has expired on Monday, 26-Oct-26 20:00:00 PDT. The current time is Tuesday, 27-Oct-26 05:17:49 PDT."
+  },
+  {
+    "id": "log_1793065426724",
+    "timestamp": "2026-10-27T01:43:46.724Z",
+    "trigger": "manual",
+    "status": "warning",
+    "importedCount": 0,
+    "importedListings": 0,
+    "importedPosts": 0,
+    "ignoredCount": 0,
+    "draftCount": 0,
+    "errorMessage": "Variables FACEBOOK_PAGE_ID ou FACEBOOK_PAGE_TOKEN manquantes sur le serveur. Veuillez renseigner votre ID de Page et votre jeton dans l’Espace Admin.",
+    "details": "Clés Facebook non configurées dans le fichier serveur"
+  }
+]
