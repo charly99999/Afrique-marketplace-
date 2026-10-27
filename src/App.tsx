@@ -246,12 +246,13 @@ export default function App() {
 
     const checkAdminAlerts = async () => {
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const adminAuthHeaders: Record<string, string> = {};
+        if (sessionData?.session?.access_token) {
+          adminAuthHeaders['Authorization'] = `Bearer ${sessionData.session.access_token}`;
+        }
         const res = await fetch('/api/admin/facebook-notifications', {
-          headers: {
-            'x-admin-id': currentUser.id,
-            'x-admin-email': currentUser.email || '',
-            'x-admin-phone': currentUser.phone || '',
-          },
+          headers: adminAuthHeaders,
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.notifications)) {
@@ -268,10 +269,7 @@ export default function App() {
             // Mark read on server so not spammed
             await fetch('/api/admin/facebook-notifications/read', {
               method: 'POST',
-              headers: {
-                'x-admin-id': currentUser.id,
-                'x-admin-email': currentUser.email || '',
-              },
+              headers: adminAuthHeaders,
             });
           }
         }

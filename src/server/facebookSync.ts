@@ -99,7 +99,6 @@ export async function fetchConfigFromDatabase(): Promise<Partial<FacebookConfig>
     const adminUser = usersData?.users?.find(
       (u) =>
         u.email === 'marcarnaudkonan2@gmail.com' ||
-        u.user_metadata?.full_name?.toLowerCase().includes('marc') ||
         u.phone?.includes('2250565242349')
     );
     if (adminUser?.user_metadata?.facebook_config) {
@@ -180,7 +179,6 @@ export async function saveFacebookConfig(updates: Partial<FacebookConfig>): Prom
       const adminUser = usersData?.users?.find(
         (u) =>
           u.email === 'marcarnaudkonan2@gmail.com' ||
-          u.user_metadata?.full_name?.toLowerCase().includes('marc') ||
           u.phone?.includes('2250565242349')
       );
       const adminId = adminUser?.id || 'd2882463-6bcf-414a-8844-6c06279e50e0';
@@ -773,7 +771,6 @@ export async function syncFacebookPagePosts(options?: {
     const foundAdmin = usersData?.users?.find(
       (u) =>
         u.email === 'marcarnaudkonan2@gmail.com' ||
-        u.user_metadata?.full_name?.toLowerCase().includes('marc') ||
         u.phone?.includes('2250565242349')
     );
     adminUserId = foundAdmin?.id || usersData?.users?.[0]?.id || 'd2882463-6bcf-414a-8844-6c06279e50e0';

@@ -72,6 +72,36 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
   }, [listing, currentUserId]);
 
+  // IMPORTANT : tous les hooks doivent être appelés AVANT tout return conditionnel
+  // (sinon erreur React #310 « Rendered more hooks than during the previous render »).
+
+  // Parse Facebook Page attribution
+  const fbAttribution = React.useMemo(() => {
+    if (!listing?.description) return null;
+    const desc = listing.description;
+    const pageMatch = desc.match(/Publié par\s*:\s*([^\n\r]+)/i);
+    const urlMatch = desc.match(/(?:Voir sur Facebook\s*:\s*|Lien Facebook\s*:\s*)(https?:\/\/[^\s\n\r]+)/i);
+    const hasFbId = /\[FB_POST_ID:[^\]]+\]/.test(desc);
+
+    if (pageMatch || urlMatch || hasFbId) {
+      return {
+        pageName: pageMatch ? pageMatch[1].trim() : 'Page Facebook',
+        url: urlMatch ? urlMatch[1].trim() : null,
+      };
+    }
+    return null;
+  }, [listing?.description]);
+
+  // Clean description removing raw metadata tags
+  const cleanDescription = React.useMemo(() => {
+    if (!listing?.description) return '';
+    return listing.description
+      .replace(/\[FB_POST_ID:[^\]]+\]/g, '')
+      .replace(/---\s*📢\s*Publié par[^\n]+/gi, '')
+      .replace(/🔗\s*Voir sur Facebook[^\n]+/gi, '')
+      .trim();
+  }, [listing?.description]);
+
   if (!isOpen || !listing) return null;
 
   const isOwner = currentUserId && listing.seller.id === currentUserId;
@@ -160,33 +190,6 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         .slice(0, 2)
         .toUpperCase()
     : 'AB';
-
-  // Parse Facebook Page attribution
-  const fbAttribution = React.useMemo(() => {
-    if (!listing?.description) return null;
-    const desc = listing.description;
-    const pageMatch = desc.match(/Publié par\s*:\s*([^\n\r]+)/i);
-    const urlMatch = desc.match(/(?:Voir sur Facebook\s*:\s*|Lien Facebook\s*:\s*)(https?:\/\/[^\s\n\r]+)/i);
-    const hasFbId = /\[FB_POST_ID:[^\]]+\]/.test(desc);
-
-    if (pageMatch || urlMatch || hasFbId) {
-      return {
-        pageName: pageMatch ? pageMatch[1].trim() : 'Page Facebook',
-        url: urlMatch ? urlMatch[1].trim() : null,
-      };
-    }
-    return null;
-  }, [listing?.description]);
-
-  // Clean description removing raw metadata tags
-  const cleanDescription = React.useMemo(() => {
-    if (!listing?.description) return '';
-    return listing.description
-      .replace(/\[FB_POST_ID:[^\]]+\]/g, '')
-      .replace(/---\s*📢\s*Publié par[^\n]+/gi, '')
-      .replace(/🔗\s*Voir sur Facebook[^\n]+/gi, '')
-      .trim();
-  }, [listing?.description]);
 
   return (
     <>

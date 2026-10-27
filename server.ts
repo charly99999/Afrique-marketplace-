@@ -663,23 +663,9 @@ async function verifyAdminAuth(req: express.Request): Promise<boolean> {
     }
   }
 
-  // 3. Database-verified User ID lookup
-  const adminIdHeader = req.headers['x-admin-id'] as string;
-  if (adminIdHeader && supabaseAdmin) {
-    try {
-      const { data: userRecord, error } = await supabaseAdmin.auth.admin.getUserById(adminIdHeader);
-      if (userRecord?.user && !error) {
-        const isMarcArnaud =
-          userRecord.user.id === 'd2882463-6bcf-414a-8844-6c06279e50e0' ||
-          (userRecord.user.email && userRecord.user.email.toLowerCase() === 'marcarnaudkonan2@gmail.com') ||
-          (userRecord.user.phone && userRecord.user.phone.replace(/[^\d]/g, '').includes('2250565242349'));
-        if (isMarcArnaud) return true;
-      }
-    } catch {
-      // Database query error
-    }
-  }
-
+  // SÉCURITÉ : l'ancienne vérification par en-tête « x-admin-id » a été supprimée.
+  // Elle acceptait n'importe quel appelant qui envoyait l'ID de l'admin (public),
+  // sans aucune preuve d'identité. Seuls la clé secrète et le JWT Supabase vérifié comptent.
   return false;
 }
 
