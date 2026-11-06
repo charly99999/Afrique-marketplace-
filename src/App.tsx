@@ -233,6 +233,99 @@ export default function App() {
     };
   }, [currentCountry, scopeAllAfrica]);
 
+  // Deep linking: parse URL hash (#ad-<id>, #/ad/<id>) or query (?ad=<id>, ?listing=<id>)
+  useEffect(() => {
+    const handleUrlListing = async () => {
+      try {
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        let targetId: string | null = null;
+
+        // Check hash: matches #ad-123 or #/ad/123 or #ad/123
+        const hashAdMatch = hash.match(/^#(?:ad-|\/ad\/|ad\/)([a-zA-Z0-9_\-]+)/);
+        if (hashAdMatch) {
+          targetId = hashAdMatch[1];
+        }
+
+        // Check query param
+        if (!targetId && search) {
+          const params = new URLSearchParams(search);
+          targetId = params.get('ad') || params.get('listing');
+        }
+
+        if (!targetId) return;
+
+        // 1. Check if already in current loaded listings
+        const existing = listings.find((l) => l.id === targetId);
+        if (existing) {
+          setSelectedListing(existing);
+          return;
+        }
+
+        // 2. Otherwise fetch directly from Supabase by ID
+        const { data, error } = await supabase
+          .from('listings')
+          .select(`
+            *,
+            seller:profiles!listings_user_id_fkey (
+              id, full_name, avatar_url, phone_verified, city, country, chats_enabled
+            )
+          `)
+          .eq('id', targetId)
+          .maybeSingle();
+
+        if (error || !data) {
+          console.warn('Annonce introuvable pour ID:', targetId);
+          return;
+        }
+
+        const directListing: Listing = {
+          id: data.id,
+          user_id: data.user_id,
+          title: data.title,
+          description: data.description,
+          price: Number(data.price) || 0,
+          currency: data.currency || 'FCFA',
+          category: data.category,
+          country: data.country || 'CI',
+          city: data.city || '',
+          images: Array.isArray(data.images) ? data.images : [],
+          condition: data.condition || 'occasion',
+          contact_phone: data.contact_phone || undefined,
+          whatsapp_phone: data.whatsapp_phone || undefined,
+          status: data.status || 'active',
+          createdAt: data.created_at,
+          edited_at: data.edited_at,
+          seller: {
+            id: data.seller?.id || data.user_id,
+            name: data.seller?.full_name || 'Vendeur',
+            phone: data.contact_phone || data.seller?.phone,
+            whatsapp: data.whatsapp_phone || data.contact_phone || data.seller?.phone,
+            avatarUrl: data.seller?.avatar_url,
+            avatar_url: data.seller?.avatar_url,
+            verified: Boolean(data.seller?.phone_verified),
+            phone_verified: Boolean(data.seller?.phone_verified),
+            city: data.seller?.city || data.city,
+            country: data.seller?.country || data.country,
+          },
+        };
+
+        setSelectedListing(directListing);
+      } catch (err) {
+        console.warn('Erreur résolution lien direct:', err);
+      }
+    };
+
+    handleUrlListing();
+
+    window.addEventListener('hashchange', handleUrlListing);
+    window.addEventListener('popstate', handleUrlListing);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlListing);
+      window.removeEventListener('popstate', handleUrlListing);
+    };
+  }, [listings]);
+
   // Check for Admin Facebook alerts (token expiration, rate limit, etc.)
   useEffect(() => {
     if (!currentUser) return;
@@ -602,7 +695,6 @@ export default function App() {
                 setShowAuthModal(true);
               }}
               onSelectListing={(l) => setSelectedListing(l)}
-              onOpenAdminFacebook={() => setShowAdminFacebookModal(true)}
             />
           ) : null}
         </main>
@@ -642,7 +734,12 @@ export default function App() {
       <ListingDetailModal
         listing={selectedListing}
         isOpen={Boolean(selectedListing)}
-        onClose={() => setSelectedListing(null)}
+        onClose={() => {
+          setSelectedListing(null);
+          if (window.location.hash.includes('ad-') || window.location.hash.includes('/ad/')) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          }
+        }}
         viewerCurrency={viewerCurrency}
         currentUserId={currentUser?.id}
         onStartChat={handleStartChatFromListing}

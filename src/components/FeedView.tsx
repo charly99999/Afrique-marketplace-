@@ -86,7 +86,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   const handleShareWhatsApp = (e: React.MouseEvent, listing: Listing) => {
     e.stopPropagation();
-    const text = `🛍️ *${listing.title}*\n💰 Prix : *${listing.price.toLocaleString()} ${listing.currency}*\n📍 Lieu : ${listing.city}\n👉 Voir l'annonce sur *Afrique Business* : https://afrique-business.app/#/ad/${listing.id}`;
+    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-business.app';
+    const directAdUrl = `${origin}/#ad-${listing.id}`;
+    const safePrice = Number(listing.price) || 0;
+    const text = `🛍️ *${listing.title}*\n💰 Prix : *${safePrice.toLocaleString()} ${listing.currency || 'FCFA'}*\n📍 Lieu : ${listing.city || ''}\n👉 Voir l'annonce sur *Afrique Business* :\n${directAdUrl}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -350,7 +353,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                         <span className="truncate">{listing.city}</span>
                       </div>
 
-                      {listing.seller.verified && (
+                      {listing.seller?.verified && (
                         <div className="flex items-center gap-1 text-[#D4AF37] shrink-0 font-bold" title="Vendeur avec téléphone vérifié">
                           <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
                           <span className="text-[10px]">Vérifié</span>

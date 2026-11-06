@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { onServiceWorkerUpdate, activateWaitingWorker } from '../lib/registerServiceWorker';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -81,23 +80,42 @@ export function usePWAInstall() {
   };
 }
 
+import { 
+  onServiceWorkerUpdate, 
+  activateWaitingWorkerAndHardReload, 
+  checkForUpdates, 
+  UpdateInfo 
+} from '../lib/registerServiceWorker';
+
 export function usePWAUpdate() {
   const [hasUpdate, setHasUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    const unsub = onServiceWorkerUpdate(() => {
+    const unsub = onServiceWorkerUpdate((info) => {
       setHasUpdate(true);
+      setUpdateInfo(info);
     });
     return () => unsub();
   }, []);
 
-  const updateApp = () => {
-    activateWaitingWorker();
+  const updateApp = async () => {
+    setIsUpdating(true);
+    await activateWaitingWorkerAndHardReload();
+  };
+
+  const dismissUpdate = () => {
+    setHasUpdate(false);
   };
 
   return {
     hasUpdate,
+    updateInfo,
+    isUpdating,
     updateApp,
+    dismissUpdate,
+    checkForUpdates,
   };
 }
 

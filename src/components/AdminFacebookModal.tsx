@@ -324,13 +324,13 @@ export const AdminFacebookModal: React.FC<AdminFacebookModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm sm:text-base font-black text-white">Import Facebook Automatique</h3>
+                <h3 className="text-sm sm:text-base font-black text-white">Import Facebook</h3>
                 <span className="px-2 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] text-[10px] font-bold border border-[#D4AF37]/30">
                   Espace Admin
                 </span>
               </div>
               <p className="text-[11px] text-gray-400">
-                Synchronisation Graph API v26.0 & analyse intelligente par Gemini AI
+                Synchronisation sur demande Graph API v26.0 & analyse intelligente par IA
               </p>
             </div>
           </div>
@@ -419,7 +419,7 @@ export const AdminFacebookModal: React.FC<AdminFacebookModalProps> = ({
 
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-[11px] text-gray-300">
                   <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>Auto-sync : Toutes les heures</span>
+                  <span>Mode : Manuel sur demande</span>
                 </div>
               </div>
 

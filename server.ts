@@ -822,6 +822,24 @@ app.post('/api/admin/facebook-notifications/read', async (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// App Version & Deployment Update Detection Endpoint
+// ----------------------------------------------------
+const SERVER_START_TIME = Date.now();
+const APP_VERSION = '2.5.1';
+
+app.get('/api/app-version', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json({
+    success: true,
+    version: APP_VERSION,
+    buildTimestamp: SERVER_START_TIME,
+    timestamp: Date.now(),
+  });
+});
+
 // Serve static public assets (manifests, icons, offline.html, sw.js)
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -841,8 +859,8 @@ async function startServer() {
     });
   }
 
-  // Initialize hourly scheduled task for Facebook Sync
-  startFacebookHourlyScheduler();
+  // Automatic Facebook Hourly Scheduler is disabled per user request (Manual import only)
+  // startFacebookHourlyScheduler();
 
   app.listen(port, () => {
     console.log(`[Afrique Business] Server active at http://localhost:${port}`);
@@ -850,3 +868,4 @@ async function startServer() {
 }
 
 startServer();
+

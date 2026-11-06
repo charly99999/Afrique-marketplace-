@@ -7,7 +7,7 @@ import { getCategoryItem, CategoryGoldIcon } from '../data/categories';
 import { 
   X, ShieldCheck, Phone, MessageSquare, Share2, 
   MapPin, Heart, Flag, Edit, CheckCircle, PauseCircle, 
-  PlayCircle, Trash2, Maximize2, Tag, Calendar, ExternalLink
+  PlayCircle, Trash2, Maximize2, Tag, Calendar, ExternalLink, Mail
 } from 'lucide-react';
 
 interface ListingDetailModalProps {
@@ -54,21 +54,30 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     setSellerPhone(null);
     setReportSubmitted(false);
 
-    // Fetch contact phone via RPC get_contact_phone (hides if user sets visibility nobody or blocked)
+    // Fetch contact phone via RPC get_contact_phone with robust error handling
     const fetchPhone = async () => {
-      setLoadingPhone(true);
-      const phone = await rpcGetContactPhone(listing.seller.id);
-      setSellerPhone(phone);
-      setLoadingPhone(false);
+      try {
+        const targetSellerId = listing?.seller?.id || listing?.user_id;
+        if (!targetSellerId) return;
+        setLoadingPhone(true);
+        const phone = await rpcGetContactPhone(targetSellerId);
+        if (phone) {
+          setSellerPhone(phone);
+        }
+      } catch (err) {
+        console.warn('Erreur récupération contact phone:', err);
+      } finally {
+        setLoadingPhone(false);
+      }
     };
 
     fetchPhone();
 
     // Check favorite status
-    if (currentUserId) {
+    if (currentUserId && listing?.id) {
       getFavoriteListingIds(currentUserId).then((ids) => {
         setIsFav(ids.includes(listing.id));
-      });
+      }).catch(() => {});
     }
   }, [listing, currentUserId]);
 
@@ -104,15 +113,39 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
   if (!isOpen || !listing) return null;
 
-  const isOwner = currentUserId && listing.seller.id === currentUserId;
-  const countryConfig = AFRICAN_COUNTRIES[listing.country as CountryCode] || AFRICAN_COUNTRIES.CI;
-  const images = listing.images && listing.images.length > 0 ? listing.images : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'];
+  // Safe seller object fallback
+  const seller = listing.seller || {
+    id: listing.user_id || 'unknown',
+    name: 'Vendeur Afrique Business',
+    phone: listing.contact_phone || undefined,
+    whatsapp: listing.whatsapp_phone || listing.contact_phone || undefined,
+    avatarUrl: undefined,
+    avatar_url: undefined,
+    verified: false,
+    phone_verified: false,
+    city: listing.city,
+    country: listing.country,
+    chats_enabled: true,
+  };
+
+  const isOwner = Boolean(currentUserId && seller.id && seller.id === currentUserId);
+  const countryConfig = AFRICAN_COUNTRIES[(listing.country || 'CI') as CountryCode] || AFRICAN_COUNTRIES.CI;
+  const images = (Array.isArray(listing.images) && listing.images.length > 0)
+    ? listing.images.filter((img) => typeof img === 'string' && img.trim().length > 0)
+    : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'];
+
+  const safePrice = Number(listing.price) || 0;
+  const safeCurrency = listing.currency || 'FCFA';
 
   const { formatted, indicativeSecondary } = convertAndFormatPrice(
-    listing.price,
-    listing.currency,
+    safePrice,
+    safeCurrency,
     viewerCurrency
   );
+
+  // Generate accessible direct deep-link URL for this ad
+  const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-business.app';
+  const directAdUrl = `${origin}/#ad-${listing.id}`;
 
   const handleToggleFavorite = async () => {
     if (!currentUserId) {
@@ -124,12 +157,12 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   };
 
   const handleShare = () => {
-    const text = `🛍️ ${listing.title}\n💰 Prix : ${listing.price.toLocaleString()} ${listing.currency}\n📍 Lieu : ${listing.city}, ${countryConfig.name}\nDécouvrez cette annonce sur Afrique Business : https://afrique-business.app/#/ad/${listing.id}`;
+    const text = `🛍️ ${listing.title}\n💰 Prix : ${safePrice.toLocaleString()} ${safeCurrency}\n📍 Lieu : ${listing.city || ''}, ${countryConfig.name}\n👉 Voir l'annonce sur Afrique Business : ${directAdUrl}`;
     if (navigator.share) {
       navigator.share({
         title: listing.title,
         text,
-        url: window.location.href,
+        url: directAdUrl,
       }).catch(() => {});
     } else {
       navigator.clipboard.writeText(text);
@@ -138,8 +171,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
   };
 
-  const effectiveContactPhone = listing.contact_phone || listing.seller?.phone || sellerPhone;
-  const effectiveWhatsAppPhone = listing.whatsapp_phone || listing.seller?.whatsapp || effectiveContactPhone;
+  const effectiveContactPhone = listing.contact_phone || seller.phone || sellerPhone;
+  const effectiveWhatsAppPhone = listing.whatsapp_phone || seller.whatsapp || effectiveContactPhone;
 
   const handleCall = () => {
     if (!effectiveContactPhone) return;
@@ -149,7 +182,15 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const handleWhatsApp = () => {
     if (!effectiveWhatsAppPhone) return;
     const cleanDigits = effectiveWhatsAppPhone.replace(/[^\d]/g, '');
-    const msg = `Bonjour, je vous contacte depuis Afrique Business pour votre annonce « ${listing.title} » affichée à ${listing.price.toLocaleString()} ${listing.currency}. Est-elle toujours disponible ?`;
+    const msg = `Bonjour, je vous contacte depuis Afrique Business au sujet de votre annonce :
+« ${listing.title} »
+💰 Prix : ${safePrice.toLocaleString()} ${safeCurrency}
+📍 Lieu : ${listing.city || ''}
+
+👉 Lien direct pour voir l'article :
+${directAdUrl}
+
+Est-elle toujours disponible ?`;
     window.open(`https://wa.me/${cleanDigits}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -158,7 +199,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       onRequireAuth?.();
       return;
     }
-    onStartChat(listing.seller.id, listing.id, listing.title);
+    onStartChat(seller.id, listing.id, listing.title);
     onClose();
   };
 
@@ -182,8 +223,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }, 2000);
   };
 
-  const sellerInitials = listing.seller.name
-    ? listing.seller.name
+  const sellerInitials = seller.name
+    ? seller.name
         .split(' ')
         .map((n) => n[0])
         .join('')
@@ -385,10 +426,10 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               {/* Seller Profile Card */}
               <div className="p-3.5 rounded-xl bg-[#181820] border border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {(listing.seller.avatarUrl || listing.seller.avatar_url) ? (
+                  {(seller.avatarUrl || seller.avatar_url) ? (
                     <img
-                      src={listing.seller.avatarUrl || listing.seller.avatar_url}
-                      alt={listing.seller.name}
+                      src={seller.avatarUrl || seller.avatar_url}
+                      alt={seller.name}
                       className="w-12 h-12 rounded-full object-cover border border-[#D4AF37]/40 bg-zinc-900"
                     />
                   ) : (
@@ -399,15 +440,15 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                      <span>{listing.seller.name}</span>
-                      {(listing.seller.phone_verified || listing.seller.verified) && (
+                      <span>{seller.name}</span>
+                      {(seller.phone_verified || seller.verified) && (
                         <span title="Numéro vérifié par SMS" className="inline-flex items-center">
                           <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
                         </span>
                       )}
                     </h4>
                     <p className="text-xs text-gray-400">
-                      {listing.city}, {countryConfig.name}
+                      {listing.city || ''}, {countryConfig.name}
                     </p>
                   </div>
                 </div>
@@ -511,6 +552,45 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Contacter le service client en cas de problème (Demande de l'utilisateur) */}
+              <div className="p-4 rounded-2xl bg-linear-to-b from-[#1C1C24] to-[#121217] border border-[#D4AF37]/35 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                      Service Client & Assistance
+                    </h4>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] font-extrabold border border-[#D4AF37]/35">
+                    Assistance Directe
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-gray-300 leading-snug">
+                  Un problème avec cette annonce, une question ou besoin d'assistance ? Notre service client officiel est disponible 7j/7 :
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                  <a
+                    href={`https://wa.me/2250565242349?text=${encodeURIComponent(`Bonjour Service Client Afrique Business, j'ai une question concernant l'annonce « ${listing.title} » (ID: ${listing.id})`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                  >
+                    <span>WhatsApp Service Client</span>
+                    <span className="text-[11px] font-mono font-bold">+225 0565242349</span>
+                  </a>
+
+                  <a
+                    href={`mailto:marcarnaudkonan2@gmail.com?subject=${encodeURIComponent(`Assistance annonce: ${listing.title} (#${listing.id})`)}`}
+                    className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-gray-200 hover:text-white font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span className="text-[10px] font-mono truncate">marcarnaudkonan2@gmail.com</span>
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -541,7 +621,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               )}
 
               {/* Message button or disabled notice if chats_enabled is false */}
-              {listing.seller?.chats_enabled === false ? (
+              {seller?.chats_enabled === false ? (
                 <div
                   className="flex-2 py-2.5 px-3 rounded-xl bg-zinc-900 border border-zinc-800 text-gray-400 text-[11px] font-semibold flex items-center justify-center text-center leading-tight min-h-[44px]"
                   title="Le vendeur ne souhaite pas recevoir de messages privés"

@@ -131,7 +131,7 @@ export function getFacebookConfig(): FacebookConfig {
   const pageId = String(db.pageId || fileData.pageId || process.env.FACEBOOK_PAGE_ID || '').trim();
   const pageToken = String(db.pageToken || fileData.pageToken || process.env.FACEBOOK_PAGE_TOKEN || '').trim();
   const pageName = String(db.pageName || fileData.pageName || process.env.FACEBOOK_PAGE_NAME || 'Afrique Business Officiel').trim();
-  const autoSyncEnabled = db.autoSyncEnabled !== undefined ? db.autoSyncEnabled : (fileData.autoSyncEnabled !== false);
+  const autoSyncEnabled = db.autoSyncEnabled !== undefined ? db.autoSyncEnabled : false;
   const syncIntervalMinutes = db.syncIntervalMinutes || fileData.syncIntervalMinutes || 60;
   const lastSyncAt = db.lastSyncAt || fileData.lastSyncAt || null;
   const adminUserId = db.adminUserId || fileData.adminUserId || 'd2882463-6bcf-414a-8844-6c06279e50e0';
@@ -1316,22 +1316,10 @@ export async function testFacebookConnection(pageIdInput?: string, pageTokenInpu
 let syncIntervalHandle: NodeJS.Timeout | null = null;
 
 export function startFacebookHourlyScheduler(): void {
-  if (syncIntervalHandle) return;
-
-  console.log('[Facebook Sync] Initializing hourly scheduled task (60 min interval)...');
-
-  // Run automatically every 60 minutes
-  syncIntervalHandle = setInterval(async () => {
-    const config = await getFacebookConfigAsync();
-    if (!config.autoSyncEnabled || !config.pageId || !config.pageToken) {
-      return;
-    }
-    console.log('[Facebook Sync] Running automatic hourly synchronization...');
-    try {
-      const res = await syncFacebookPagePosts({ trigger: 'hourly_cron' });
-      console.log(`[Facebook Sync Scheduled] Result: ${res.imported} imported, ${res.drafts} drafts, ${res.ignored} ignored.`);
-    } catch (err) {
-      console.error('[Facebook Sync Scheduled] Error during hourly run:', err);
-    }
-  }, 60 * 60 * 1000);
+  if (syncIntervalHandle) {
+    clearInterval(syncIntervalHandle);
+    syncIntervalHandle = null;
+  }
+  console.log('[Facebook Sync] Automatic hourly import is disabled per user settings. Manual sync only.');
 }
+

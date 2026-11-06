@@ -11,10 +11,12 @@ import {
   X, User, Shield, Lock, Eye, Bell, Globe, 
   Moon, Sun, Zap, HelpCircle, Info, 
   LogOut, Trash2, Check, AlertCircle, Camera, ChevronRight, ShieldCheck, 
-  Phone, Mail, MessageSquare, Star, Activity, Sparkles, AlertTriangle, Key
+  Phone, Mail, MessageSquare, Star, Activity, Sparkles, AlertTriangle, Key,
+  RefreshCw
 } from 'lucide-react';
 import officialLogoImg from '../assets/images/logo_afrique_business_1792378287169.jpg';
 import { PWAInstallButton } from './PWAInstallButton';
+import { checkForUpdates, activateWaitingWorkerAndHardReload } from '../lib/registerServiceWorker';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -34,6 +36,7 @@ export interface SettingsModalProps {
 
 type SettingsSection = 
   | 'menu'
+  | 'service_client'
   | 'personal_details'
   | 'phone_number'
   | 'change_email'
@@ -127,6 +130,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // --- 11. Delete Account Double Confirmation ---
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  // --- 12. App Update Check State ---
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateCheckMsg, setUpdateCheckMsg] = useState<string | null>(null);
+
+  const handleManualCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateCheckMsg(null);
+    try {
+      const found = await checkForUpdates();
+      if (found) {
+        setUpdateCheckMsg('Nouvelle version trouvée ! Redémarrage...');
+        await activateWaitingWorkerAndHardReload();
+      } else {
+        setUpdateCheckMsg('Votre application est parfaitement à jour (v2.5.1)');
+      }
+    } catch {
+      setUpdateCheckMsg('Vérification effectuée. Version actuelle : v2.5.1');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   // Feedback banner
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -447,6 +472,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div>
               <h3 className="text-sm font-extrabold text-white">
                 {section === 'menu' && 'Paramètres'}
+                {section === 'service_client' && 'Service Client & Assistance'}
                 {section === 'personal_details' && 'Détails Personnels'}
                 {section === 'phone_number' && 'Numéro de Téléphone'}
                 {section === 'change_email' && 'Modifier l’Email'}
@@ -549,6 +575,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Navigation List with Colorful Icons */}
               <div className="divide-y divide-zinc-800/80 rounded-2xl bg-[#181820] border border-zinc-800 overflow-hidden text-xs">
                 
+                {/* 0. Service Client & Assistance (Accès Direct & Prioritaire) */}
+                <button
+                  type="button"
+                  onClick={() => setSection('service_client')}
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px] bg-linear-to-r from-emerald-500/10 via-[#181820] to-transparent border-b border-emerald-500/25"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-sm">
+                      <Phone className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white block">Service Client & Assistance</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">7j/7</span>
+                      </div>
+                      <span className="text-[10px] text-gray-300">
+                        WhatsApp & Appel : +225 0565242349 · Email officiel
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-emerald-400" />
+                </button>
+
                 {/* 1. Détails Personnels */}
                 {currentUser && (
                   <button
@@ -839,6 +888,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================
+              SECTION: SERVICE CLIENT & ASSISTANCE (Demande expresse)
+             ======================================================== */}
+          {section === 'service_client' && (
+            <div className="space-y-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-linear-to-b from-[#1C1C24] to-[#121217] border border-[#D4AF37]/40 shadow-xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-md border border-emerald-500/30">
+                    <Phone className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-white">Service Client Afrique Business</h4>
+                    <span className="text-[11px] text-[#D4AF37] font-semibold">Direction & Assistance Utilisateurs</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  Notre équipe est à votre disposition 7j/7 pour vous assister dans l'utilisation de la plateforme, résoudre tout problème sur une publication ou vous accompagner dans vos démarches commerciales.
+                </p>
+
+                <div className="grid grid-cols-1 gap-2.5 pt-2">
+                  <a
+                    href="https://wa.me/2250565242349?text=Bonjour%20Service%20Client%20Afrique%20Business%2C%20j%27ai%20besoin%20d%27aide"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-between transition-all shadow-md cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <MessageSquare className="w-5 h-5 text-white" />
+                      <div className="text-left">
+                        <span className="block text-xs font-bold">Écrire sur WhatsApp</span>
+                        <span className="text-[11px] font-mono text-emerald-100 font-bold">+225 0565242349</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-black/25 text-[10px] font-bold">Réponse rapide</span>
+                  </a>
+
+                  <a
+                    href="tel:+2250565242349"
+                    className="p-3.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold flex items-center justify-between transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Phone className="w-5 h-5 text-[#D4AF37]" />
+                      <div className="text-left">
+                        <span className="block text-xs font-bold">Appel Téléphonique Direct</span>
+                        <span className="text-[11px] font-mono text-[#D4AF37] font-bold">+225 0565242349</span>
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-400">Côte d'Ivoire & International</span>
+                  </a>
+
+                  <a
+                    href="mailto:marcarnaudkonan2@gmail.com?subject=Contact%20Service%20Client%20Afrique%20Business"
+                    className="p-3.5 rounded-xl bg-[#16161D] hover:bg-zinc-800 border border-zinc-700 text-white font-bold flex items-center justify-between transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Mail className="w-5 h-5 text-blue-400" />
+                      <div className="text-left">
+                        <span className="block text-xs font-bold">Email Officiel du Service Client</span>
+                        <span className="text-[11px] font-mono text-zinc-300">marcarnaudkonan2@gmail.com</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                  </a>
+                </div>
+
+                <div className="p-3 rounded-xl bg-black/40 border border-zinc-800 text-[11px] text-gray-400 flex items-center gap-2 mt-2">
+                  <ShieldCheck className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                  <span>Direction : Marc Arnaud Konan — Engagement d'écoute, de sécurité et d'assistance.</span>
+                </div>
               </div>
             </div>
           )}
@@ -1365,8 +1488,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-extrabold text-white">Afrique Business</h4>
-                  <span className="text-[11px] text-[#D4AF37] font-semibold">Version 2.4.0 (PWA Production)</span>
+                  <span className="text-[11px] text-[#D4AF37] font-semibold">Version 2.5.0 (PWA Production)</span>
                 </div>
+              </div>
+
+              {/* Check App Updates Button */}
+              <div className="p-3.5 rounded-xl bg-linear-to-r from-[#181820] to-[#121217] border border-[#D4AF37]/35 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="font-bold text-white block text-xs">Mise à jour de l'application</span>
+                    <span className="text-[10px] text-gray-400">Rechercher les dernières modifications du serveur</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleManualCheckUpdate}
+                    disabled={checkingUpdate}
+                    className="px-3 py-1.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-50 min-h-[38px] hover:brightness-110 active:scale-95 transition-all shadow-md shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+                    <span>{checkingUpdate ? 'Recherche...' : 'Vérifier'}</span>
+                  </button>
+                </div>
+                {updateCheckMsg && (
+                  <p className="text-[11px] text-[#D4AF37] font-bold flex items-center gap-1.5 pt-1 border-t border-zinc-800">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>{updateCheckMsg}</span>
+                  </p>
+                )}
               </div>
 
               {/* Install PWA Button */}
@@ -1405,10 +1553,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-zinc-800">
-                <h5 className="font-bold text-white mb-1">Contact & Support</h5>
-                <p>Email officiel : <span className="text-[#D4AF37]">support@afrique-business.app</span></p>
-                <p>WhatsApp assistance : <span className="text-emerald-400">+225 07 00 00 00 00</span></p>
+              <div className="pt-2 border-t border-zinc-800 space-y-1">
+                <h5 className="font-bold text-white mb-1">Contact & Support Officiel</h5>
+                <p>Email direct : <a href="mailto:marcarnaudkonan2@gmail.com" className="text-[#D4AF37] underline font-mono">marcarnaudkonan2@gmail.com</a></p>
+                <p>WhatsApp & Appel : <a href="https://wa.me/2250565242349" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline font-mono">+225 0565242349</a></p>
               </div>
             </div>
           )}

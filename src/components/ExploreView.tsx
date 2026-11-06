@@ -34,7 +34,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 
   const filtered = listings.filter((l) => {
     if (selectedCat !== 'ALL' && l.category !== selectedCat) return false;
-    if (verifiedOnly && !l.seller.verified) return false;
+    if (verifiedOnly && !l.seller?.verified) return false;
     if (conditionFilter !== 'ALL' && l.condition !== conditionFilter) return false;
     if (maxPrice && l.price > Number(maxPrice)) return false;
     if (search.trim()) {
@@ -230,7 +230,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 
                   <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-[11px] text-gray-400">
                     <span className="truncate">{listing.city}</span>
-                    {listing.seller.verified && (
+                    {listing.seller?.verified && (
                       <span className="flex items-center gap-1 text-[#D4AF37] font-bold text-[10px]">
                         <ShieldCheck className="w-3.5 h-3.5" />
                         <span>Vérifié</span>

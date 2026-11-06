@@ -5,7 +5,7 @@ import { fetchListings, getFavoriteListingIds, updateListing, deleteListing } fr
 import { 
   ShieldCheck, MapPin, Settings, Plus, Edit, 
   Trash2, CheckCircle2, PauseCircle, PlayCircle, Heart,
-  Package, Store
+  Package, Store, Phone, Mail
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -26,7 +26,6 @@ interface ProfileViewProps {
   onEditListing: (listing: Listing) => void;
   onRequireAuth: () => void;
   onSelectListing: (listing: Listing) => void;
-  onOpenAdminFacebook?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -37,7 +36,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onEditListing,
   onRequireAuth,
   onSelectListing,
-  onOpenAdminFacebook,
 }) => {
   const [userListings, setUserListings] = useState<Listing[]>([]);
   const [favoriteListings, setFavoriteListings] = useState<Listing[]>([]);
@@ -228,41 +226,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Admin Quick Access Banner */}
-      {currentUser && (
-        currentUser.email === 'marcarnaudkonan2@gmail.com' ||
-        currentUser.fullName?.toLowerCase().includes('marc') ||
-        currentUser.phone?.includes('2250565242349') ||
-        currentUser.id === 'd2882463-6bcf-414a-8844-6c06279e50e0'
-      ) && (
-        <div className="p-4 rounded-2xl bg-linear-to-r from-[#1877F2]/15 via-[#181820] to-[#121217] border border-[#1877F2]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-md">
-              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-xs sm:text-sm font-black text-white">Import Automatique Facebook</h4>
-                <span className="px-2 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] text-[10px] font-bold border border-[#D4AF37]/30">
-                  Espace Admin
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Synchronisation Graph API v26.0, extraction IA de vos annonces et journal d'import.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onOpenAdminFacebook}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black font-black text-xs shrink-0 cursor-pointer shadow-md hover:brightness-110 active:scale-95 transition-all"
-          >
-            Gérer & Synchroniser
-          </button>
-        </div>
-      )}
 
       {/* Main Tabs: Mes Annonces vs Mes Favoris */}
       <div className="flex border-b border-zinc-800">
@@ -474,15 +437,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   className="p-3 rounded-2xl bg-[#131317] border border-zinc-800 shadow-md flex items-center gap-3 cursor-pointer hover:border-[#D4AF37]/40 transition-colors"
                 >
                   <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-zinc-700">
-                    <img src={fav.images[0]} alt="" className="w-full h-full object-cover" />
+                    <img src={fav.images?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'} alt="" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-xs font-black text-[#D4AF37] block tabular-nums">
-                      {fav.price.toLocaleString()} {fav.currency}
+                      {(fav.price || 0).toLocaleString()} {fav.currency || 'FCFA'}
                     </span>
                     <h4 className="text-xs font-bold text-white truncate mt-0.5">{fav.title}</h4>
                     <p className="text-[10px] text-gray-400 truncate">
-                      {fav.city} · {fav.seller.name}
+                      {fav.city || ''} · {fav.seller?.name || 'Vendeur'}
                     </p>
                   </div>
                 </div>
@@ -491,6 +454,47 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           )}
         </div>
       )}
+
+      {/* Service Client & Support Direct Afrique Business (Demande expresse) */}
+      <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-linear-to-b from-[#181820] to-[#121216] border border-[#D4AF37]/40 shadow-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
+              Service Client & Support Direct
+            </h3>
+          </div>
+          <span className="px-2 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] text-[10px] font-extrabold border border-[#D4AF37]/35">
+            Support Officiel
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-300 leading-relaxed">
+          Un problème avec une publication, une question sur votre compte ou besoin d'assistance ? Contactez directement la direction du service client :
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs">
+          <a
+            href="https://wa.me/2250565242349?text=Bonjour%20Service%20Client%20Afrique%20Business%2C%20j%27ai%20besoin%20d%27assistance"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+          >
+            <Phone className="w-4 h-4 text-white" />
+            <span>WhatsApp / Tél :</span>
+            <span className="font-mono font-black">+225 0565242349</span>
+          </a>
+
+          <a
+            href="mailto:marcarnaudkonan2@gmail.com?subject=Contact%20Service%20Client%20Afrique%20Business"
+            className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-gray-200 hover:text-white font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <Mail className="w-4 h-4 text-[#D4AF37]" />
+            <span>Email :</span>
+            <span className="font-mono text-zinc-300 truncate">marcarnaudkonan2@gmail.com</span>
+          </a>
+        </div>
+      </div>
     </div>
   );
 };
