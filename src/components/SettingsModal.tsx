@@ -409,17 +409,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setMessage(null);
 
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      // 1. Update in backend credentials store
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser?.id,
+          oldPassword,
+          newPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Impossible de mettre à jour le mot de passe.');
+      }
 
-      setMessage({ type: 'success', text: 'Mot de passe modifié avec succès dans Supabase.' });
+      // 2. Also sync with Supabase Auth if session exists
+      try {
+        await supabase.auth.updateUser({ password: newPassword });
+      } catch {
+        // Ignored if local session
+      }
+
+      setMessage({ type: 'success', text: 'Mot de passe modifié avec succès !' });
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => {
         setMessage(null);
         setSection('menu');
-      }, 2500);
+      }, 2000);
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Erreur lors du changement de mot de passe.' });
     } finally {

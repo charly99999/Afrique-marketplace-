@@ -24,6 +24,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   defaultMode = 'LOGIN',
 }) => {
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'SMS_VERIFY' | 'SMS_LOGIN' | 'FORGOT'>('LOGIN');
+  const [smsSource, setSmsSource] = useState<'register' | 'login'>('login');
 
   // Register type: Phone or Email
   const [regType, setRegType] = useState<'phone' | 'email'>('phone');
@@ -82,14 +83,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 1. Password Login (Phone or Real Email)
+  // 1. Password Login (Phone or Real Email) - Multi-tier verification
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setIsLoading(true);
 
     try {
-      // Resolve phone or email to login credential
+      // Step A: First verify against server credential store (salted scrypt hash)
+      try {
+        const loginRes = await fetch('/api/auth/login-with-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: loginIdentifier.trim(),
+            password: loginPassword,
+          }),
+        });
+        const loginData = await loginRes.json();
+
+        if (loginData.success && loginData.user) {
+          const loggedUser: StoredUser = {
+            id: loginData.user.id,
+            firstName: loginData.user.firstName || 'Utilisateur',
+            lastName: loginData.user.lastName || '',
+            fullName: loginData.user.fullName || 'Utilisateur',
+            email: loginData.user.email,
+            phone: loginData.user.phone,
+            country: (loginData.user.country as CountryCode) || 'CI',
+            city: loginData.user.city || 'Abidjan',
+            avatarUrl: loginData.user.avatarUrl,
+            phone_verified: Boolean(loginData.user.phone_verified),
+            activeRole: 'BUYER',
+            kycLevel: 1,
+            trustScore: 5.0,
+            walletBalance: 0,
+            registeredAt: loginData.user.registeredAt || new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+          };
+
+          setCurrentUser(loggedUser);
+          onAuthSuccess(loggedUser);
+          onClose();
+          return;
+        }
+      } catch (backendErr) {
+        console.warn('Backend login attempt error:', backendErr);
+      }
+
+      // Step B: Resolve account candidate emails and try Supabase Auth
       const resolveRes = await fetch('/api/auth/resolve-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -97,50 +138,59 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
       const resolveData = await resolveRes.json();
 
-      if (!resolveData.success || !resolveData.loginEmail) {
-        setErrorMsg("Identifiant introuvable. Veuillez vérifier ou créer un compte.");
+      const candidateEmails: string[] = resolveData.candidateEmails || [resolveData.loginEmail || loginIdentifier.trim()];
+
+      let supabaseSuccess = false;
+      let authenticatedUser: any = null;
+
+      for (const email of candidateEmails) {
+        try {
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password: loginPassword,
+          });
+          if (!authError && authData?.user) {
+            supabaseSuccess = true;
+            authenticatedUser = authData.user;
+            break;
+          }
+        } catch {
+          // try next candidate
+        }
+      }
+
+      if (supabaseSuccess && authenticatedUser) {
+        const profile = await getProfile(authenticatedUser.id);
+        const privatePhone = await getAccountPhone(authenticatedUser.id);
+        const fullName = profile?.full_name || authenticatedUser.user_metadata?.full_name || 'Utilisateur';
+        const nameParts = fullName.split(' ');
+        const isCleanEmail = authenticatedUser.email && !authenticatedUser.email.includes('@afrique-business.');
+
+        const loggedUser: StoredUser = {
+          id: authenticatedUser.id,
+          firstName: nameParts[0] || 'Utilisateur',
+          lastName: nameParts.slice(1).join(' ') || '',
+          fullName,
+          email: isCleanEmail ? authenticatedUser.email : undefined,
+          phone: privatePhone || authenticatedUser.phone || (loginIdentifier.startsWith('+') ? loginIdentifier : undefined),
+          country: (profile?.country as CountryCode) || 'CI',
+          city: profile?.city || 'Abidjan',
+          avatarUrl: profile?.avatar_url,
+          phone_verified: Boolean(profile?.phone_verified),
+          activeRole: 'BUYER',
+          kycLevel: 1,
+          trustScore: 5.0,
+          walletBalance: 0,
+          registeredAt: new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+        };
+
+        setCurrentUser(loggedUser);
+        onAuthSuccess(loggedUser);
+        onClose();
         return;
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: resolveData.loginEmail,
-        password: loginPassword,
-      });
-
-      if (authError || !authData.user) {
-        setErrorMsg("Identifiant ou mot de passe incorrect. Veuillez vérifier vos accès.");
-        return;
-      }
-
-      // Load profile and private phone from Supabase
-      const profile = await getProfile(authData.user.id);
-      const privatePhone = await getAccountPhone(authData.user.id);
-      const fullName = profile?.full_name || authData.user.user_metadata?.full_name || 'Utilisateur';
-      const nameParts = fullName.split(' ');
-
-      const isCleanEmail = authData.user.email && !authData.user.email.includes('@afrique-business.app') && !authData.user.email.includes('@afrique-business.internal');
-
-      const loggedUser: StoredUser = {
-        id: authData.user.id,
-        firstName: nameParts[0] || 'Utilisateur',
-        lastName: nameParts.slice(1).join(' ') || '',
-        fullName,
-        email: isCleanEmail ? authData.user.email : undefined,
-        phone: privatePhone || authData.user.phone || (loginIdentifier.startsWith('+') ? loginIdentifier : undefined),
-        country: (profile?.country as CountryCode) || 'CI',
-        city: profile?.city || 'Abidjan',
-        avatarUrl: profile?.avatar_url,
-        phone_verified: Boolean(profile?.phone_verified),
-        activeRole: 'BUYER',
-        kycLevel: 1,
-        trustScore: 5.0,
-        walletBalance: 0,
-        registeredAt: new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
-      };
-
-      setCurrentUser(loggedUser);
-      onAuthSuccess(loggedUser);
-      onClose();
+      setErrorMsg("Mot de passe incorrect ou compte introuvable. Vous pouvez vous connecter rapidement par code SMS ou réinitialiser votre mot de passe ci-dessous.");
     } catch (err: any) {
       console.error('Login error:', err);
       setErrorMsg("Erreur lors de la connexion. Veuillez vérifier vos identifiants.");
@@ -186,6 +236,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (result.success) {
         setCountdown(60);
+        setSmsSource('register');
         if (result.simulated && result.otp) {
           setSimulatedCode(result.otp);
           setSmsOtpCode(result.otp);
@@ -267,7 +318,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // 3. Confirm SMS OTP & Finish Phone Registration
+  // 3. Confirm SMS OTP & Finish Phone Registration or Quick SMS Login
   const handleVerifyRegisterOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -278,16 +329,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setIsLoading(true);
-    const result = await verifySMSOTP(targetPhone, smsOtpCode.trim());
-
-    if (!result.success) {
-      setIsLoading(false);
-      setErrorMsg(result.message || 'Code SMS incorrect ou expiré.');
-      return;
-    }
 
     try {
-      // Create user with verified phone via backend (which registers into Supabase Auth + profiles + profile_private)
+      // Branch 1: Quick SMS Login
+      if (smsSource === 'login') {
+        const loginRes = await fetch('/api/auth/quick-sms-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: targetPhone,
+            code: smsOtpCode.trim(),
+          }),
+        });
+        const loginData = await loginRes.json();
+
+        if (!loginData.success || !loginData.user) {
+          throw new Error(loginData.message || 'Code SMS incorrect ou expiré.');
+        }
+
+        const loggedUser: StoredUser = {
+          id: loginData.user.id,
+          firstName: loginData.user.firstName || 'Utilisateur',
+          lastName: loginData.user.lastName || '',
+          fullName: loginData.user.fullName || 'Utilisateur',
+          phone: loginData.user.phone || targetPhone,
+          email: loginData.user.email,
+          country: (loginData.user.country as CountryCode) || 'CI',
+          city: loginData.user.city || 'Abidjan',
+          avatarUrl: loginData.user.avatarUrl,
+          phone_verified: true,
+          activeRole: 'BUYER',
+          kycLevel: 1,
+          trustScore: 5.0,
+          walletBalance: 0,
+          registeredAt: loginData.user.registeredAt || new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+        };
+
+        setCurrentUser(loggedUser);
+        onAuthSuccess(loggedUser);
+        onClose();
+        return;
+      }
+
+      // Branch 2: Phone Registration
       const regRes = await fetch('/api/auth/register-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -305,14 +389,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         throw new Error(regJson.message || 'Échec de la création du compte.');
       }
 
-      // Sign in on client to establish Supabase Auth Session
-      const { data: authData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: regJson.loginEmail,
-        password: regPassword,
-      });
-
-      if (signInErr || !authData.user) {
-        throw new Error(signInErr?.message || 'Erreur lors de l’initialisation de la session.');
+      // Try client signInWithPassword if Supabase Auth user was created
+      try {
+        await supabase.auth.signInWithPassword({
+          email: regJson.loginEmail,
+          password: regPassword,
+        });
+      } catch {
+        // Proceed with profile session
       }
 
       const newUser: StoredUser = {
@@ -335,14 +419,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onAuthSuccess(newUser);
       onClose();
     } catch (err: any) {
-      console.error('Registration error:', err);
-      setErrorMsg(err.message || 'Erreur lors de la finalisation du compte.');
+      console.error('Registration/SMS login error:', err);
+      setErrorMsg(err.message || 'Erreur lors de la vérification.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 4. Quick SMS OTP Login
+  // 4. Quick SMS OTP Login Request
   const handleSMSLoginRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -353,6 +437,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setIsLoading(true);
+    setSmsSource('login');
     const result = await sendSMSOTP(targetPhone);
     setIsLoading(false);
 
@@ -414,7 +499,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // 6. Forgot Password -> Confirm SMS code and update password in Supabase Auth
+  // 6. Forgot Password -> Confirm SMS code and update password (Auto-login on success!)
   const handleForgotVerifySMS = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -451,10 +536,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         throw new Error(data.message || 'Échec de la réinitialisation du mot de passe.');
       }
 
-      setSuccessMsg('Votre mot de passe a été modifié avec succès ! Vous pouvez vous connecter.');
-      setMode('LOGIN');
-      setLoginIdentifier(forgotPhone);
-      setLoginPassword('');
+      setSuccessMsg('Votre mot de passe a été modifié avec succès !');
+
+      if (data.user) {
+        const loggedUser: StoredUser = {
+          id: data.user.id,
+          firstName: data.user.firstName || 'Utilisateur',
+          lastName: data.user.lastName || '',
+          fullName: data.user.fullName || 'Utilisateur',
+          phone: data.user.phone || forgotPhone,
+          email: data.user.email,
+          country: (data.user.country as CountryCode) || 'CI',
+          city: data.user.city || 'Abidjan',
+          avatarUrl: data.user.avatarUrl,
+          phone_verified: true,
+          activeRole: 'BUYER',
+          kycLevel: 1,
+          trustScore: 5.0,
+          walletBalance: 0,
+          registeredAt: data.user.registeredAt || new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+        };
+
+        setCurrentUser(loggedUser);
+        onAuthSuccess(loggedUser);
+        setTimeout(() => onClose(), 1200);
+      } else {
+        setMode('LOGIN');
+        setLoginIdentifier(forgotPhone);
+        setLoginPassword(newPassword);
+      }
     } catch (err: any) {
       console.error('Password reset error:', err);
       setErrorMsg(err.message || 'Erreur lors de la réinitialisation.');
@@ -560,6 +670,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
               {isLoading ? 'Connexion en cours...' : 'Se connecter'}
+            </button>
+
+            <div className="relative flex py-1 items-center">
+              <div className="grow border-t border-[#E5E8EF]"></div>
+              <span className="shrink mx-3 text-[10px] text-[#596273] uppercase font-bold tracking-wider">ou</span>
+              <div className="grow border-t border-[#E5E8EF]"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('SMS_LOGIN');
+                setErrorMsg(null);
+                setSuccessMsg(null);
+                if (loginIdentifier.trim().startsWith('+') || /^\d{8,}$/.test(loginIdentifier.replace(/[^\d]/g, ''))) {
+                  setTargetPhone(loginIdentifier.trim());
+                }
+              }}
+              className="w-full py-2.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-[#172033] text-xs font-bold hover:bg-gray-100 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <Smartphone className="w-4 h-4 text-[#C69A35]" />
+              <span>Connexion rapide par code SMS</span>
             </button>
 
             <div className="pt-2 text-center text-xs">
@@ -806,13 +938,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               disabled={isLoading}
               className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
-              {isLoading ? 'Vérification en cours...' : 'Confirmer le code et valider mon compte'}
+              {isLoading
+                ? 'Vérification en cours...'
+                : smsSource === 'login'
+                ? 'Confirmer le code et me connecter'
+                : 'Confirmer le code et valider mon compte'}
             </button>
 
             <div className="flex items-center justify-between pt-2 text-xs text-[#596273]">
               <button
                 type="button"
-                onClick={() => setMode('REGISTER')}
+                onClick={() => setMode(smsSource === 'login' ? 'SMS_LOGIN' : 'REGISTER')}
                 className="hover:text-[#172033]"
               >
                 Changer de numéro
