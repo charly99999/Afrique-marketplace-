@@ -31,7 +31,6 @@ export interface SettingsModalProps {
   onToggleDarkMode: () => void;
   onOpenAuth: () => void;
   onLogout: () => void;
-  onOpenAdminFacebook?: () => void;
 }
 
 type SettingsSection = 
@@ -62,7 +61,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleDarkMode,
   onOpenAuth,
   onLogout,
-  onOpenAdminFacebook,
 }) => {
   const [section, setSection] = useState<SettingsSection>('menu');
 
@@ -451,26 +449,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const citiesList = CITIES_BY_COUNTRY[country] || ['Abidjan', 'Bouaké', 'Dakar', 'Lagos'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-lg rounded-2xl bg-[#141418] border border-zinc-800 shadow-2xl text-white max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="w-full max-w-lg rounded-2xl bg-white border border-[#E5E8EF] shadow-2xl text-[#172033] max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-[#16161D]">
+        <div className="flex items-center justify-between p-4 border-b border-[#E5E8EF] bg-[#F8F9FC]">
           <div className="flex items-center gap-2.5">
             {section !== 'menu' && (
               <button
                 type="button"
                 onClick={() => setSection('menu')}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 cursor-pointer transition-colors"
+                className="p-1.5 rounded-lg text-[#596273] hover:text-[#172033] bg-white border border-[#E5E8EF] hover:bg-[#F1F4F9] cursor-pointer transition-colors"
                 title="Retour aux paramètres"
               >
                 ←
               </button>
             )}
-            <div className="w-8 h-8 rounded-lg overflow-hidden border border-[#D4AF37]/40 bg-black flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-[#C69A35]/40 bg-white flex items-center justify-center">
               <img src={officialLogoImg} alt="Afrique Business" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-white">
+              <h3 className="text-sm font-extrabold text-[#172033]">
                 {section === 'menu' && 'Paramètres'}
                 {section === 'service_client' && 'Service Client & Assistance'}
                 {section === 'personal_details' && 'Détails Personnels'}
@@ -491,7 +489,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full text-gray-400 hover:text-white bg-zinc-800/80 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+            className="p-1.5 rounded-full text-[#596273] hover:text-[#172033] bg-white border border-[#E5E8EF] hover:bg-[#F1F4F9] cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -502,11 +500,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div
             className={`px-4 py-2.5 text-xs font-semibold flex items-center gap-2 ${
               message.type === 'success'
-                ? 'bg-amber-950/70 text-[#D4AF37] border-b border-[#D4AF37]/40'
-                : 'bg-red-950/70 text-red-200 border-b border-red-800'
+                ? 'bg-amber-50 text-[#A27B20] border-b border-[#C69A35]/40'
+                : 'bg-red-50 text-red-700 border-b border-red-200'
             }`}
           >
-            {message.type === 'success' ? <Check className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+            {message.type === 'success' ? <Check className="w-4 h-4 shrink-0 text-[#C69A35]" /> : <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />}
             <span>{message.text}</span>
           </div>
         )}
@@ -521,43 +519,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-4">
               {/* Account Quick Card */}
               {currentUser ? (
-                <div className="p-3.5 rounded-2xl bg-[#1A1A22] border border-zinc-800 flex items-center justify-between">
+                <div className="p-3.5 rounded-2xl bg-[#F8F9FC] border border-[#E5E8EF] flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {currentUser.avatarUrl ? (
                       <img
                         src={currentUser.avatarUrl}
                         alt=""
-                        className="w-12 h-12 rounded-full object-cover border border-[#D4AF37]/50 bg-zinc-900"
+                        className="w-12 h-12 rounded-full object-cover border-2 border-[#C69A35]/50 bg-white"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-linear-to-tr from-[#D4AF37] to-[#F59E0B] text-black font-extrabold flex items-center justify-center text-sm shadow-md">
+                      <div className="w-12 h-12 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-sm shadow-xs">
                         {currentUser.fullName.slice(0, 2).toUpperCase()}
                       </div>
                     )}
                     <div>
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-[#172033] flex items-center gap-1.5">
                         <span>{currentUser.fullName}</span>
                         {currentUser.phone_verified && (
-                          <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#C69A35]" />
                         )}
                       </h4>
-                      <p className="text-[11px] text-gray-400">{currentUser.phone || currentUser.email}</p>
+                      <p className="text-[11px] text-[#596273]">{currentUser.phone || currentUser.email}</p>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setSection('personal_details')}
-                    className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/15 hover:bg-[#D4AF37]/25 text-xs font-bold text-[#D4AF37] border border-[#D4AF37]/40 cursor-pointer min-h-[44px]"
+                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-xs font-bold text-[#A27B20] border border-[#C69A35]/30 cursor-pointer min-h-[44px]"
                   >
                     Détails
                   </button>
                 </div>
               ) : (
-                <div className="p-4 rounded-2xl bg-[#1A1A22] border border-zinc-800 flex items-center justify-between">
+                <div className="p-4 rounded-2xl bg-[#F8F9FC] border border-[#E5E8EF] flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold text-white">Vous n'êtes pas connecté</h4>
-                    <p className="text-[11px] text-gray-400">Connectez-vous pour gérer votre compte</p>
+                    <h4 className="text-xs font-bold text-[#172033]">Vous n'êtes pas connecté</h4>
+                    <p className="text-[11px] text-[#596273]">Connectez-vous pour gérer votre compte</p>
                   </div>
                   <button
                     type="button"
@@ -565,7 +563,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClose();
                       onOpenAuth();
                     }}
-                    className="px-3.5 py-2 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-extrabold cursor-pointer shadow-md min-h-[44px]"
+                    className="px-3.5 py-2 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black cursor-pointer shadow-xs min-h-[44px]"
                   >
                     Se connecter
                   </button>
@@ -573,29 +571,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
 
               {/* Navigation List with Colorful Icons */}
-              <div className="divide-y divide-zinc-800/80 rounded-2xl bg-[#181820] border border-zinc-800 overflow-hidden text-xs">
+              <div className="divide-y divide-[#E5E8EF] rounded-2xl bg-white border border-[#E5E8EF] overflow-hidden text-xs shadow-xs">
                 
                 {/* 0. Service Client & Assistance (Accès Direct & Prioritaire) */}
                 <button
                   type="button"
                   onClick={() => setSection('service_client')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px] bg-linear-to-r from-emerald-500/10 via-[#181820] to-transparent border-b border-emerald-500/25"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-emerald-50/50 transition-colors cursor-pointer text-left min-h-[48px] bg-linear-to-r from-emerald-50/80 via-white to-transparent border-b border-emerald-100"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-sm">
-                      <Phone className="w-4 h-4 text-emerald-400" />
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0 shadow-xs">
+                      <Phone className="w-4 h-4 text-emerald-700" />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white block">Service Client & Assistance</span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">7j/7</span>
+                        <span className="font-bold text-[#172033] block">Service Client & Assistance</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">7j/7</span>
                       </div>
-                      <span className="text-[10px] text-gray-300">
+                      <span className="text-[10px] text-[#596273]">
                         WhatsApp & Appel : +225 0565242349 · Email officiel
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-emerald-400" />
+                  <ChevronRight className="w-4 h-4 text-emerald-700" />
                 </button>
 
                 {/* 1. Détails Personnels */}
@@ -603,18 +601,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSection('personal_details')}
-                    className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                    className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-[#D4AF37] flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-[#C69A35] flex items-center justify-center border border-amber-200">
                         <User className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="font-bold text-white block">Détails Personnels</span>
-                        <span className="text-[10px] text-gray-400">Photo, nom, prénom, ville, date de naissance, sexe</span>
+                        <span className="font-bold text-[#172033] block">Détails Personnels</span>
+                        <span className="text-[10px] text-[#596273]">Photo, nom, prénom, ville, date de naissance, sexe</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                    <ChevronRight className="w-4 h-4 text-[#596273]" />
                   </button>
                 )}
 
@@ -623,20 +621,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSection('phone_number')}
-                    className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                    className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
                         <Phone className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="font-bold text-white block">Numéro de Téléphone</span>
-                        <span className="text-[10px] text-gray-400">
+                        <span className="font-bold text-[#172033] block">Numéro de Téléphone</span>
+                        <span className="text-[10px] text-[#596273]">
                           {currentUser.phone ? currentUser.phone : 'Ajouter un numéro'} (profile_private.phone)
                         </span>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                    <ChevronRight className="w-4 h-4 text-[#596273]" />
                   </button>
                 )}
 
@@ -645,18 +643,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSection('change_email')}
-                    className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                    className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200">
                         <Mail className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="font-bold text-white block">Modifier l'Email</span>
-                        <span className="text-[10px] text-gray-400">Via Supabase Auth avec confirmation par email</span>
+                        <span className="font-bold text-[#172033] block">Modifier l'Email</span>
+                        <span className="text-[10px] text-[#596273]">Via Supabase Auth avec confirmation par email</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                    <ChevronRight className="w-4 h-4 text-[#596273]" />
                   </button>
                 )}
 
@@ -664,32 +662,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setSection('language')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center border border-purple-200">
                       <Globe className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-white block">Changer de Langue</span>
-                      <span className="text-[10px] text-gray-400">
+                      <span className="font-bold text-[#172033] block">Changer de Langue</span>
+                      <span className="text-[10px] text-[#596273]">
                         {language === 'fr' ? 'Français (FR)' : 'English (EN)'}
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 text-[#596273]" />
                 </button>
 
                 {/* 5. Désactiver les chats */}
                 {currentUser && (
-                  <div className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors min-h-[48px]">
+                  <div className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors min-h-[48px]">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200">
                         <MessageSquare className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="font-bold text-white block">Messagerie privée</span>
-                        <span className="text-[10px] text-gray-400">
+                        <span className="font-bold text-[#172033] block">Messagerie privée</span>
+                        <span className="text-[10px] text-[#596273]">
                           {chatsEnabled ? 'Activé (les acheteurs peuvent vous écrire)' : 'Désactivé ("Ce vendeur a désactivé les messages")'}
                         </span>
                       </div>
@@ -700,8 +698,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={handleToggleChats}
                       className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer min-h-[36px] ${
                         chatsEnabled
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                          : 'bg-zinc-800 text-gray-400 border border-zinc-700'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-gray-100 text-[#596273] border border-[#E5E8EF]'
                       }`}
                     >
                       {chatsEnabled ? 'Activé' : 'Désactivé'}
@@ -713,18 +711,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setSection('notifications')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-yellow-500/15 text-yellow-400 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
                       <Bell className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-white block">Gérer les Notifications</span>
-                      <span className="text-[10px] text-gray-400">Alertes messages, SMS et emails (notif_prefs)</span>
+                      <span className="font-bold text-[#172033] block">Gérer les Notifications</span>
+                      <span className="text-[10px] text-[#596273]">Alertes messages, SMS et emails (notif_prefs)</span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 text-[#596273]" />
                 </button>
 
                 {/* 7. Vérifier la connexion */}
@@ -734,100 +732,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     setSection('connection_test');
                     handleRunConnectionTest();
                   }}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-teal-500/15 text-teal-400 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
                       <Activity className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-white block">Vérifier la Connexion</span>
-                      <span className="text-[10px] text-gray-400">Mesure réelle du temps de réponse vers Supabase</span>
+                      <span className="font-bold text-[#172033] block">Vérifier la Connexion</span>
+                      <span className="text-[10px] text-[#596273]">Mesure réelle du temps de réponse vers Supabase</span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 text-[#596273]" />
                 </button>
 
                 {/* 8. Évaluez-nous */}
                 <button
                   type="button"
                   onClick={() => setSection('rate_us')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-[#D4AF37] flex items-center justify-center">
-                      <Star className="w-4 h-4 fill-[#D4AF37]" />
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-[#C69A35] flex items-center justify-center border border-amber-200">
+                      <Star className="w-4 h-4 fill-[#C69A35]" />
                     </div>
                     <div>
-                      <span className="font-bold text-white block">Évaluez-nous</span>
-                      <span className="text-[10px] text-gray-400">Note de 1 à 5 étoiles et retour utilisateur</span>
+                      <span className="font-bold text-[#172033] block">Évaluez-nous</span>
+                      <span className="text-[10px] text-[#596273]">Note de 1 à 5 étoiles et retour utilisateur</span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 text-[#596273]" />
                 </button>
 
                 {/* 9. Mode sombre */}
                 <button
                   type="button"
                   onClick={() => setSection('theme')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-500/15 text-slate-300 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
                       <Moon className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-white block">Mode Sombre</span>
-                      <span className="text-[10px] text-gray-400">
-                        {themePreference === 'system' ? 'Système' : themePreference === 'dark' ? 'Sombre' : 'Clair'}
+                      <span className="font-bold text-[#172033] block">Thème de l'application</span>
+                      <span className="text-[10px] text-[#596273]">
+                        {themePreference === 'system' ? 'Système' : themePreference === 'dark' ? 'Sombre' : 'Clair (Blanc & Or)'}
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 text-[#596273]" />
                 </button>
 
                 {/* 10. À propos d'Afrique Business */}
                 <button
                   type="button"
                   onClick={() => setSection('about')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-700 flex items-center justify-center border border-cyan-200">
                       <Info className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-white block">À propos d'Afrique Business</span>
-                      <span className="text-[10px] text-gray-400">Version 2.4.0, CGU, confidentialité, règles</span>
+                      <span className="font-bold text-[#172033] block">À propos d'Afrique Business</span>
+                      <span className="text-[10px] text-[#596273]">Version 3.0.0 (Blanc & Or), CGU, règles</span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
-                </button>
-
-                {/* Espace Admin • Import Facebook (Réservé à l'administrateur) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenAdminFacebook?.();
-                  }}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px] bg-linear-to-r from-[#1877F2]/10 via-[#181820] to-transparent border-t border-b border-[#1877F2]/25"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#1877F2]/20 text-[#1877F2] flex items-center justify-center font-bold shrink-0">
-                      <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white block">Espace Admin • Import Facebook</span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30">Admin</span>
-                      </div>
-                      <span className="text-[10px] text-gray-400">Synchronisation Graph API v26, logs & Gemini IA</span>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 text-[#596273]" />
                 </button>
 
                 {/* 11. Changer le mot de passe */}
@@ -835,18 +807,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSection('change_password')}
-                    className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left min-h-[48px]"
+                    className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left min-h-[48px]"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-orange-500/15 text-orange-400 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-700 flex items-center justify-center border border-orange-200">
                         <Key className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="font-bold text-white block">Changer le Mot de Passe</span>
-                        <span className="text-[10px] text-gray-400">Ancien + nouveau mot de passe</span>
+                        <span className="font-bold text-[#172033] block">Changer le Mot de Passe</span>
+                        <span className="text-[10px] text-[#596273]">Ancien + nouveau mot de passe</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                    <ChevronRight className="w-4 h-4 text-[#596273]" />
                   </button>
                 )}
 
@@ -855,18 +827,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSection('delete_account')}
-                    className="w-full p-3.5 flex items-center justify-between hover:bg-red-950/20 transition-colors cursor-pointer text-left min-h-[48px]"
+                    className="w-full p-3.5 flex items-center justify-between hover:bg-red-50/50 transition-colors cursor-pointer text-left min-h-[48px]"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-red-500/15 text-red-400 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center border border-red-200">
                         <Trash2 className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="font-bold text-red-400 block">Supprimer définitivement mon compte</span>
-                        <span className="text-[10px] text-gray-400">Action irréversible avec double confirmation</span>
+                        <span className="font-bold text-red-600 block">Supprimer définitivement mon compte</span>
+                        <span className="text-[10px] text-[#596273]">Action irréversible avec double confirmation</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                    <ChevronRight className="w-4 h-4 text-[#596273]" />
                   </button>
                 )}
 
@@ -878,10 +850,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onLogout();
                       onClose();
                     }}
-                    className="w-full p-3.5 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left text-gray-400 hover:text-white min-h-[48px]"
+                    className="w-full p-3.5 flex items-center justify-between hover:bg-[#F8F9FC] transition-colors cursor-pointer text-left text-gray-500 hover:text-[#172033] min-h-[48px]"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-zinc-800 text-gray-300 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center border border-[#E5E8EF]">
                         <LogOut className="w-4 h-4" />
                       </div>
                       <span className="font-bold">Se déconnecter</span>

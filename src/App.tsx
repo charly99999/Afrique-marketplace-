@@ -14,7 +14,6 @@ import { AuthModal } from './components/AuthModal';
 import { SettingsModal } from './components/SettingsModal';
 import { TermsModal } from './components/TermsModal';
 import { PWAUpdateToast } from './components/PWAUpdateToast';
-import { AdminFacebookModal } from './components/AdminFacebookModal';
 
 import { Listing, CountryCode, StoredUser, AppNotification } from './types';
 import { 
@@ -43,9 +42,9 @@ export default function App() {
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Display & Data Saver (Dark mode default matching the obsidian & gold logo)
+  // Display & Data Saver (White & Gold Premium default)
   const [dataSaver, setDataSaver] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
 
   // User & Auth State (Real user or null if not yet signed in)
   const [currentUser, setCurrentUserState] = useState<StoredUser | null>(() => {
@@ -58,7 +57,6 @@ export default function App() {
   // Modals state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [showAdminFacebookModal, setShowAdminFacebookModal] = useState(false);
 
   // Real Listings Store
   const [listings, setListings] = useState<Listing[]>([]);
@@ -524,12 +522,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] text-[#F8FAFC]">
+    <div className="min-h-screen bg-[#F8F9FC] text-[#172033]">
       {/* Splash Screen on cold start (2s duration) */}
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
       {/* Main Container */}
-      <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto min-h-screen flex flex-col bg-[#09090B] shadow-2xl relative">
+      <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto min-h-screen flex flex-col bg-[#F8F9FC] shadow-sm relative">
         {/* App Header */}
         <Header
           currentCountry={currentCountry}
@@ -560,7 +558,7 @@ export default function App() {
         />
 
         {/* View Switcher Bar: Marketplace vs Fil Social */}
-        <div className="bg-[#121216] border-b border-zinc-800 px-3 py-1.5 flex items-center justify-between text-xs font-bold">
+        <div className="bg-white border-b border-[#E5E8EF] px-3 py-1.5 flex items-center justify-between text-xs font-bold">
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -569,8 +567,8 @@ export default function App() {
               }}
               className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                 !showCommunityView && activeTab !== 'sell'
-                  ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-sm'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                  : 'text-[#596273] hover:text-[#172033]'
               }`}
             >
               <ShoppingBag className="w-3.5 h-3.5" />
@@ -581,8 +579,8 @@ export default function App() {
               onClick={() => setShowCommunityView(true)}
               className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                 showCommunityView
-                  ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-sm'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                  : 'text-[#596273] hover:text-[#172033]'
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5" />
@@ -596,8 +594,8 @@ export default function App() {
             }}
             className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
               scopeAllAfrica
-                ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
-                : 'bg-zinc-800 border-zinc-700 text-gray-400 hover:text-white'
+                ? 'bg-[#C69A35]/15 border-[#C69A35] text-[#172033]'
+                : 'bg-white border-[#E5E8EF] text-[#596273] hover:text-[#172033]'
             }`}
           >
             {scopeAllAfrica ? '🌍 Toute Afrique' : `📍 ${currentCountry}`}
@@ -785,7 +783,6 @@ export default function App() {
           setShowAuthModal(true);
         }}
         onLogout={handleLogout}
-        onOpenAdminFacebook={() => setShowAdminFacebookModal(true)}
       />
 
       {/* 5. Legal Terms & Charter Modal */}
@@ -794,17 +791,7 @@ export default function App() {
         onClose={() => setShowTermsModal(false)}
       />
 
-      {/* 6. Admin Facebook Import & Sync Modal */}
-      <AdminFacebookModal
-        isOpen={showAdminFacebookModal}
-        onClose={() => setShowAdminFacebookModal(false)}
-        currentUser={currentUser}
-        onRefreshData={() => {
-          loadListings();
-        }}
-      />
-
-      {/* 7. PWA Update & Offline Notifications */}
+      {/* 6. PWA Update & Offline Notifications */}
       <PWAUpdateToast />
     </div>
   );

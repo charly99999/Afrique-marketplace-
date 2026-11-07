@@ -300,22 +300,22 @@ export const PublishView: React.FC<PublishViewProps> = ({
   const activeCategoryItem = getCategoryItem(category);
 
   return (
-    <div className="max-w-2xl mx-auto px-3.5 sm:px-6 py-4 pb-28 text-white">
+    <div className="max-w-2xl mx-auto px-3.5 sm:px-6 py-4 pb-28 text-[#172033]">
       {/* Top Bar with Cancel */}
-      <div className="flex items-center justify-between pb-3 mb-4 border-b border-zinc-800">
+      <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#E5E8EF]">
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-white transition-colors cursor-pointer min-h-[44px] px-2"
+          className="flex items-center gap-1.5 text-xs font-bold text-[#596273] hover:text-[#172033] transition-colors cursor-pointer min-h-[44px] px-2"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Annuler</span>
         </button>
-        <h2 className="text-sm font-extrabold text-white">
+        <h2 className="text-sm font-extrabold text-[#172033]">
           {isEditing ? 'Modifier mon annonce' : 'Déposer une annonce'}
         </h2>
         <div className="w-20 text-right">
-          <span className="text-[11px] font-bold text-[#D4AF37] bg-[#1C1C24] px-2.5 py-1 rounded-full border border-[#D4AF37]/30">
+          <span className="text-[11px] font-bold text-[#C69A35] bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
             {photos.length}/8 photos
           </span>
         </div>
@@ -323,29 +323,29 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
       {/* Error message banner */}
       {errorMessage && (
-        <div className="mb-4 p-3.5 rounded-xl bg-red-950/70 border border-red-800 text-xs text-red-200 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+        <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
           <span className="font-medium">{errorMessage}</span>
         </div>
       )}
 
       {/* Success / Compression Feedback */}
       {compressionMsg && (
-        <div className="mb-4 p-3.5 rounded-xl bg-amber-950/50 border border-[#D4AF37]/60 text-xs text-[#D4AF37] flex items-center gap-2">
-          <Check className="w-4 h-4 shrink-0" />
+        <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-[#C69A35]/40 text-xs text-[#A27B20] flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0 text-[#C69A35]" />
           <span className="font-semibold">{compressionMsg}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Photo Uploader Card */}
-        <div className="p-4 rounded-2xl bg-[#131317] border border-zinc-800 shadow-md">
+        <div className="p-4 rounded-2xl bg-white border border-[#E5E8EF] shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <span className="text-xs font-bold text-white block">Photos réelles de l'annonce *</span>
-              <span className="text-[11px] text-gray-400">1 à 8 photos (compressées automatiquement en WebP)</span>
+              <span className="text-xs font-bold text-[#172033] block">Photos réelles de l'annonce *</span>
+              <span className="text-[11px] text-[#596273]">1 à 8 photos (compressées automatiquement en WebP)</span>
             </div>
-            <label className="px-3 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#F59E0B] text-black text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm min-h-[44px]">
+            <label className="px-3 py-2 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] hover:brightness-105 text-[#172033] text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all shadow-xs min-h-[44px] active:scale-95">
               <Camera className="w-4 h-4 stroke-[2.5]" />
               <span>{isCompressing ? 'Chargement...' : '+ Ajouter'}</span>
               <input
@@ -365,23 +365,23 @@ export const PublishView: React.FC<PublishViewProps> = ({
               {photos.map((photo, index) => (
                 <div
                   key={index}
-                  className="relative aspect-square rounded-xl overflow-hidden border border-zinc-700 bg-black group"
+                  className="relative aspect-square rounded-xl overflow-hidden border border-[#E5E8EF] bg-[#F1F4F9] group shadow-xs"
                 >
                   <img src={photo} alt="" className="w-full h-full object-cover" />
                   
                   {index === 0 && (
-                    <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-[#D4AF37] text-black text-[9px] font-black shadow-sm">
+                    <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-[#C69A35] text-white text-[9px] font-black shadow-sm">
                       Principale
                     </span>
                   )}
 
                   {/* Move and delete controls */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                  <div className="absolute inset-0 bg-[#172033]/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
                     {index > 0 && (
                       <button
                         type="button"
                         onClick={() => handleMovePhoto(index, 'up')}
-                        className="p-1.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        className="p-1.5 rounded-lg bg-white/90 text-[#172033] hover:bg-white min-h-[36px] min-w-[36px] flex items-center justify-center"
                         title="Déplacer à gauche"
                       >
                         <ArrowLeft className="w-4 h-4" />
@@ -391,7 +391,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleMovePhoto(index, 'down')}
-                        className="p-1.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        className="p-1.5 rounded-lg bg-white/90 text-[#172033] hover:bg-white min-h-[36px] min-w-[36px] flex items-center justify-center"
                         title="Déplacer à droite"
                       >
                         <ArrowLeft className="w-4 h-4 rotate-180" />
@@ -400,7 +400,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemovePhoto(index)}
-                      className="p-1.5 rounded-lg bg-red-600 text-white hover:bg-red-500 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                      className="p-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 min-h-[36px] min-w-[36px] flex items-center justify-center"
                       title="Supprimer la photo"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -410,18 +410,18 @@ export const PublishView: React.FC<PublishViewProps> = ({
               ))}
             </div>
           ) : (
-            <div className="mt-3 p-6 rounded-xl border border-dashed border-zinc-700 bg-[#17171C] text-center">
-              <ImageIcon className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-gray-300">Aucune photo ajoutée pour le moment</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">Une annonce avec au moins une photo se vend 5x plus vite.</p>
+            <div className="mt-3 p-6 rounded-xl border border-dashed border-[#E5E8EF] bg-[#F8F9FC] text-center">
+              <ImageIcon className="w-8 h-8 text-[#596273] mx-auto mb-2 opacity-60" />
+              <p className="text-xs font-semibold text-[#172033]">Aucune photo ajoutée pour le moment</p>
+              <p className="text-[11px] text-[#596273] mt-0.5">Une annonce avec au moins une photo se vend 5x plus vite.</p>
             </div>
           )}
         </div>
 
         {/* Title, Category & Subcategory Card */}
-        <div className="p-4 rounded-2xl bg-[#131317] border border-zinc-800 shadow-md space-y-3.5">
+        <div className="p-4 rounded-2xl bg-white border border-[#E5E8EF] shadow-xs space-y-3.5">
           <div>
-            <label className="text-xs font-bold text-gray-200 block mb-1">
+            <label className="text-xs font-bold text-[#172033] block mb-1">
               Titre de l'annonce *
             </label>
             <input
@@ -430,7 +430,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Toyota RAV4 2021 automatique toutes options"
               required
-              className="w-full px-3.5 py-3 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+              className="w-full px-3.5 py-3 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
             />
           </div>
 
@@ -442,23 +442,23 @@ export const PublishView: React.FC<PublishViewProps> = ({
             <button
               type="button"
               onClick={() => setIsCategoryModalOpen(true)}
-              className="w-full p-3.5 rounded-xl border border-zinc-700 bg-[#17171C] hover:border-[#D4AF37] text-left flex items-center justify-between transition-colors cursor-pointer min-h-[48px]"
+              className="w-full p-3.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] hover:border-[#C69A35] text-left flex items-center justify-between transition-colors cursor-pointer min-h-[48px]"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-black/60 border border-[#D4AF37]/40 flex items-center justify-center shrink-0">
-                  <CategoryGoldIcon categoryKey={category} className="w-5 h-5 text-[#D4AF37]" />
+                <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                  <CategoryGoldIcon categoryKey={category} className="w-5 h-5 text-[#C69A35]" />
                 </div>
                 <div>
-                  <span className="text-xs font-extrabold text-white block">
+                  <span className="text-xs font-extrabold text-[#172033] block">
                     {activeCategoryItem?.label || 'Sélectionner une catégorie'}
                   </span>
-                  <span className="text-[10px] text-gray-400">
+                  <span className="text-[10px] text-[#596273]">
                     {subcategory ? `Sous-catégorie : ${subcategory}` : 'Cliquez pour choisir ou changer de catégorie'}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#D4AF37]">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#C69A35]">
                 <span>Changer</span>
                 <ChevronRight className="w-4 h-4" />
               </div>
@@ -467,17 +467,17 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
           {/* Subcategory (editable input) */}
           <div>
-            <label className="text-xs font-bold text-gray-200 block mb-1">
+            <label className="text-xs font-bold text-[#172033] block mb-1">
               Sous-catégorie (facultatif ou précisé)
             </label>
             <div className="relative">
-              <Tag className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Tag className="w-4 h-4 text-[#C69A35] absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={subcategory}
                 onChange={(e) => setSubcategory(e.target.value)}
                 placeholder="Ex: Voitures, Smartphones, Appartements à louer..."
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
               />
             </div>
             {activeCategoryItem?.subcategories && activeCategoryItem.subcategories.length > 0 && (
@@ -489,8 +489,8 @@ export const PublishView: React.FC<PublishViewProps> = ({
                     onClick={() => setSubcategory(sub)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
                       subcategory === sub
-                        ? 'bg-[#D4AF37] text-black font-bold'
-                        : 'bg-zinc-800/80 text-gray-300 hover:text-white border border-zinc-700'
+                        ? 'bg-[#C69A35] text-white font-bold'
+                        : 'bg-white text-[#596273] hover:text-[#172033] border border-[#E5E8EF]'
                     }`}
                   >
                     {sub}
@@ -502,13 +502,13 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="text-xs font-bold text-gray-200 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 État du produit *
               </label>
               <select
                 value={condition}
                 onChange={(e) => setCondition(e.target.value as ListingCondition)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
               >
                 <option value="neuf">100% Neuf</option>
                 <option value="occasion">Occasion / Seconde main</option>
@@ -516,25 +516,25 @@ export const PublishView: React.FC<PublishViewProps> = ({
             </div>
 
             <div>
-              <label className="text-xs font-bold text-gray-200 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Nom du vendeur ou de l'entreprise *
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={sellerName}
                   onChange={(e) => setSellerName(e.target.value)}
                   placeholder="Votre nom ou nom commercial"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
                 />
               </div>
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-bold text-gray-200 block mb-1">
+            <label className="text-xs font-bold text-[#172033] block mb-1">
               Description complète *
             </label>
             <textarea
@@ -543,16 +543,16 @@ export const PublishView: React.FC<PublishViewProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Détaillez les caractéristiques, l'état précis, les accessoires inclus et les conditions de remise..."
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none"
             />
           </div>
         </div>
 
         {/* Pricing & Location Card */}
-        <div className="p-4 rounded-2xl bg-[#131317] border border-zinc-800 shadow-md space-y-3.5">
+        <div className="p-4 rounded-2xl bg-white border border-[#E5E8EF] shadow-xs space-y-3.5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-bold text-gray-200 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Prix demandé *
               </label>
               <input
@@ -563,18 +563,18 @@ export const PublishView: React.FC<PublishViewProps> = ({
                 onChange={(e) => setPrice(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="Ex: 50000"
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-base font-bold text-[#D4AF37] placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none tabular-nums min-h-[44px]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base font-bold text-[#C69A35] placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none tabular-nums min-h-[44px]"
               />
             </div>
 
             <div>
-              <label className="text-xs font-bold text-gray-200 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Devise *
               </label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
               >
                 <option value="XOF">FCFA (XOF) - UEMOA</option>
                 <option value="XAF">FCFA (XAF) - CEMAC</option>
@@ -593,7 +593,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
           <div className="space-y-3 pt-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-bold text-gray-200 block mb-1">
+                <label className="text-xs font-bold text-[#172033] block mb-1">
                   Pays *
                 </label>
                 <select
@@ -604,7 +604,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
                     const defaultCity = CITIES_BY_COUNTRY[c]?.[0] || 'Abidjan';
                     setCity(defaultCity);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
                 >
                   {Object.values(AFRICAN_COUNTRIES).map((c) => (
                     <option key={c.code} value={c.code}>
@@ -616,11 +616,11 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
               {/* Searchable City */}
               <div className="relative">
-                <label className="text-xs font-bold text-gray-200 block mb-1">
+                <label className="text-xs font-bold text-[#172033] block mb-1">
                   Ville du pays actif *
                 </label>
                 <div className="relative">
-                  <MapPin className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <MapPin className="w-4 h-4 text-[#C69A35] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     value={city}
@@ -632,13 +632,13 @@ export const PublishView: React.FC<PublishViewProps> = ({
                     }}
                     placeholder="Choisir ou saisir la ville..."
                     required
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
                   />
                 </div>
 
                 {/* City dropdown list */}
                 {showCityDropdown && (
-                  <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-48 overflow-y-auto rounded-xl bg-[#1A1A22] border border-zinc-700 shadow-xl py-1 text-xs divide-y divide-zinc-800">
+                  <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-48 overflow-y-auto rounded-xl bg-white border border-[#E5E8EF] shadow-xl py-1 text-xs divide-y divide-[#E5E8EF]">
                     {filteredCities.map((c) => (
                       <button
                         key={c}
@@ -647,19 +647,19 @@ export const PublishView: React.FC<PublishViewProps> = ({
                           setCity(c);
                           setShowCityDropdown(false);
                         }}
-                        className="w-full px-3.5 py-2.5 text-left text-white hover:bg-[#D4AF37] hover:text-black font-semibold flex items-center justify-between cursor-pointer transition-colors"
+                        className="w-full px-3.5 py-2.5 text-left text-[#172033] hover:bg-[#F8F9FC] hover:text-[#C69A35] font-semibold flex items-center justify-between cursor-pointer transition-colors"
                       >
                         <span>{c}</span>
-                        {city === c && <Check className="w-3.5 h-3.5" />}
+                        {city === c && <Check className="w-3.5 h-3.5 text-[#C69A35]" />}
                       </button>
                     ))}
                     {filteredCities.length === 0 && (
-                      <div className="p-3 text-center text-gray-400">
+                      <div className="p-3 text-center text-[#596273]">
                         Aucune ville prédéfinie. Saisie libre acceptée : "{city}".
                         <button
                           type="button"
                           onClick={() => setShowCityDropdown(false)}
-                          className="mt-1 block mx-auto text-[#D4AF37] font-bold"
+                          className="mt-1 block mx-auto text-[#C69A35] font-bold"
                         >
                           Valider cette ville
                         </button>
@@ -672,7 +672,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
             {/* Quartier / Commune */}
             <div>
-              <label className="text-xs font-bold text-gray-200 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Quartier / Commune / Précision géographique
               </label>
               <input
@@ -680,60 +680,60 @@ export const PublishView: React.FC<PublishViewProps> = ({
                 value={quartier}
                 onChange={(e) => setQuartier(e.target.value)}
                 placeholder="Ex: Cocody Angré, Plateau, Almadies, Victoria Island, Akwa..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-medium placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none min-h-[44px]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-medium placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none min-h-[44px]"
               />
             </div>
           </div>
         </div>
 
         {/* Coordonnées de contact direct (Téléphone et WhatsApp) */}
-        <div className="p-4 rounded-2xl bg-[#131317] border border-zinc-800 shadow-md space-y-3.5">
+        <div className="p-4 rounded-2xl bg-white border border-[#E5E8EF] shadow-xs space-y-3.5">
           <div>
-            <h3 className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <h3 className="text-xs font-bold text-[#C69A35] uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <Phone className="w-3.5 h-3.5" />
               <span>Coordonnées de contact direct</span>
             </h3>
-            <p className="text-[11px] text-gray-400">
+            <p className="text-[11px] text-[#596273]">
               Ces numéros (préremplis avec votre profil) seront directement cliquables pour les appels et WhatsApp.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-bold text-gray-200 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Numéro de téléphone d'appel *
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Phone className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="tel"
                   value={contactPhone}
                   onChange={(e) => handleContactPhoneChange(e.target.value)}
                   placeholder="Ex: +2250707070707"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-mono focus:border-[#D4AF37] focus:outline-none tabular-nums min-h-[44px]"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-mono focus:border-[#C69A35] focus:bg-white focus:outline-none tabular-nums min-h-[44px]"
                 />
               </div>
-              <span className="text-[10px] text-gray-400 mt-1 block">Avec indicatif pays (ex: +225, +221, +237...)</span>
+              <span className="text-[10px] text-[#596273] mt-1 block">Avec indicatif pays (ex: +225, +221, +237...)</span>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-gray-200">
+                <label className="text-xs font-bold text-[#172033]">
                   Numéro WhatsApp *
                 </label>
-                <label className="flex items-center gap-1.5 text-[11px] text-[#D4AF37] cursor-pointer">
+                <label className="flex items-center gap-1.5 text-[11px] text-[#C69A35] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={sameAsPhone}
                     onChange={(e) => handleSameAsPhoneToggle(e.target.checked)}
-                    className="accent-[#D4AF37] rounded cursor-pointer"
+                    className="accent-[#C69A35] rounded cursor-pointer"
                   />
                   <span className="font-semibold">Même numéro</span>
                 </label>
               </div>
               <div className="relative">
-                <MessageSquare className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <MessageSquare className="w-4 h-4 text-emerald-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="tel"
                   value={whatsappPhone}
@@ -741,10 +741,10 @@ export const PublishView: React.FC<PublishViewProps> = ({
                   disabled={sameAsPhone}
                   placeholder="Ex: +2250707070707"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-white text-sm font-mono focus:border-[#D4AF37] focus:outline-none tabular-nums disabled:opacity-60 disabled:bg-[#121216] min-h-[44px]"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-[#172033] text-sm font-mono focus:border-[#C69A35] focus:bg-white focus:outline-none tabular-nums disabled:opacity-60 disabled:bg-gray-100 min-h-[44px]"
                 />
               </div>
-              <span className="text-[10px] text-gray-400 mt-1 block">Discussion directe sur WhatsApp</span>
+              <span className="text-[10px] text-[#596273] mt-1 block">Discussion directe sur WhatsApp</span>
             </div>
           </div>
         </div>
@@ -753,9 +753,9 @@ export const PublishView: React.FC<PublishViewProps> = ({
         <button
           type="submit"
           disabled={isSubmitting || isCompressing}
-          className="w-full py-4 px-4 rounded-xl bg-linear-to-r from-[#D4AF37] via-[#F59E0B] to-[#C5A059] hover:brightness-110 active:scale-[0.99] text-black text-sm font-black flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50 min-h-[50px]"
+          className="w-full py-4 px-4 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] hover:brightness-105 active:scale-[0.99] text-[#172033] text-sm font-black flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50 min-h-[50px]"
         >
-          <Check className="w-5 h-5 stroke-[3] text-black" />
+          <Check className="w-5 h-5 stroke-[3] text-[#172033]" />
           <span>
             {isSubmitting
               ? 'Enregistrement dans Supabase...'

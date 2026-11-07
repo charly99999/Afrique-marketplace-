@@ -464,28 +464,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-2xl bg-[#141418] border border-zinc-800 p-5 sm:p-6 shadow-2xl text-white max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="w-full max-w-md rounded-2xl bg-white border border-[#E5E8EF] p-5 sm:p-6 shadow-2xl text-[#172033] max-h-[92vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800">
+        <div className="flex items-center justify-between pb-3.5 border-b border-[#E5E8EF]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl overflow-hidden border border-[#D4AF37]/50 bg-black flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl overflow-hidden border border-[#C69A35]/50 bg-[#F8F9FC] flex items-center justify-center">
               <img src={officialLogoImg} alt="Afrique Business" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-white">
+              <h3 className="text-sm font-extrabold text-[#172033]">
                 {mode === 'LOGIN' && 'Connexion à votre compte'}
                 {mode === 'REGISTER' && 'Créer un compte gratuit'}
                 {mode === 'SMS_VERIFY' && 'Vérification par code SMS'}
                 {mode === 'SMS_LOGIN' && 'Connexion rapide par SMS'}
                 {mode === 'FORGOT' && 'Mot de passe oublié'}
               </h3>
-              <p className="text-[10px] text-gray-400">Marché panafricain 100% sécurisé</p>
+              <p className="text-[10px] text-[#596273]">Marché panafricain 100% sécurisé</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
+            className="p-1.5 rounded-lg text-[#596273] hover:text-[#172033] hover:bg-[#F8F9FC] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -493,15 +493,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Feedback message banner */}
         {errorMsg && (
-          <div className="mt-3.5 p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-xs flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <div className="mt-3.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
             <span className="leading-snug">{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="mt-3.5 p-3 rounded-xl bg-amber-950/60 border border-[#D4AF37]/40 text-[#D4AF37] text-xs flex items-start gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="mt-3.5 p-3 rounded-xl bg-amber-50 border border-[#C69A35]/40 text-[#A27B20] text-xs flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-[#C69A35] shrink-0 mt-0.5" />
             <span className="leading-snug">{successMsg}</span>
           </div>
         )}
@@ -510,25 +510,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {mode === 'LOGIN' && (
           <form onSubmit={handleLoginSubmit} className="py-4 space-y-3.5">
             <div>
-              <label className="text-xs font-bold text-gray-300 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Numéro de téléphone ou Adresse e-mail *
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={loginIdentifier}
                   onChange={(e) => setLoginIdentifier(e.target.value)}
                   placeholder="Ex: +2250707070707 ou amadou@gmail.com"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none placeholder-zinc-500 text-sm"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none placeholder-gray-400 text-sm"
                 />
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-gray-300">Mot de passe *</label>
+                <label className="text-xs font-bold text-[#172033]">Mot de passe *</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -536,20 +536,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setErrorMsg(null);
                     setSuccessMsg(null);
                   }}
-                  className="text-[11px] text-[#D4AF37] hover:underline"
+                  className="text-[11px] text-[#C69A35] font-bold hover:underline"
                 >
                   Mot de passe oublié ?
                 </button>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   placeholder="Votre mot de passe"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none placeholder-zinc-500 text-sm"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none placeholder-gray-400 text-sm"
                 />
               </div>
             </div>
@@ -557,13 +557,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 active:scale-99 transition-all cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-50"
+              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
               {isLoading ? 'Connexion en cours...' : 'Se connecter'}
             </button>
 
             <div className="pt-2 text-center text-xs">
-              <span className="text-gray-400">Pas encore de compte ? </span>
+              <span className="text-[#596273]">Pas encore de compte ? </span>
               <button
                 type="button"
                 onClick={() => {
@@ -571,7 +571,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setErrorMsg(null);
                   setSuccessMsg(null);
                 }}
-                className="font-bold text-[#D4AF37] hover:underline"
+                className="font-black text-[#C69A35] hover:underline"
               >
                 Créer un compte
               </button>
@@ -584,8 +584,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handleRegisterSubmit} className="py-4 space-y-3">
             {/* Method Toggle: Numéro de téléphone OU Adresse e-mail */}
             <div>
-              <label className="text-xs font-bold text-gray-300 block mb-1.5">Méthode d'inscription *</label>
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#181820] border border-zinc-800">
+              <label className="text-xs font-bold text-[#172033] block mb-1.5">Méthode d'inscription *</label>
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF]">
                 <button
                   type="button"
                   onClick={() => {
@@ -594,8 +594,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     regType === 'phone'
-                      ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-sm'
-                      : 'text-gray-400 hover:text-white'
+                      ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                      : 'text-[#596273] hover:text-[#172033]'
                   }`}
                 >
                   <Phone className="w-3.5 h-3.5" />
@@ -609,8 +609,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     regType === 'email'
-                      ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-sm'
-                      : 'text-gray-400 hover:text-white'
+                      ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                      : 'text-[#596273] hover:text-[#172033]'
                   }`}
                 >
                   <Mail className="w-3.5 h-3.5" />
@@ -621,26 +621,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1">Prénom *</label>
+                <label className="text-xs font-bold text-[#172033] block mb-1">Prénom *</label>
                 <input
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="Ex: Amadou"
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1">Nom *</label>
+                <label className="text-xs font-bold text-[#172033] block mb-1">Nom *</label>
                 <input
                   type="text"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Ex: Koné"
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                 />
               </div>
             </div>
@@ -648,38 +648,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Input according to chosen method */}
             {regType === 'phone' ? (
               <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1">
+                <label className="text-xs font-bold text-[#172033] block mb-1">
                   Numéro de téléphone avec indicatif *
                 </label>
                 <div className="relative">
-                  <Phone className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Phone className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="tel"
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
                     placeholder="+225 07 07 07 07 07"
                     required
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white font-mono focus:border-[#D4AF37] focus:outline-none text-sm"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] font-mono focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm"
                   />
                 </div>
-                <span className="text-[10px] text-gray-400 mt-1 block">
+                <span className="text-[10px] text-[#596273] mt-1 block">
                   Un code SMS de vérification sécurisé vous sera envoyé par Twilio.
                 </span>
               </div>
             ) : (
               <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1">
+                <label className="text-xs font-bold text-[#172033] block mb-1">
                   Adresse e-mail réelle *
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     placeholder="amadou.kone@gmail.com"
                     required
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                   />
                 </div>
               </div>
@@ -687,11 +687,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1">Pays *</label>
+                <label className="text-xs font-bold text-[#172033] block mb-1">Pays *</label>
                 <select
                   value={regCountry}
                   onChange={(e) => setRegCountry(e.target.value as CountryCode)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm"
                 >
                   {Object.values(AFRICAN_COUNTRIES).map((c) => (
                     <option key={c.code} value={c.code}>
@@ -702,32 +702,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1">Ville *</label>
+                <label className="text-xs font-bold text-[#172033] block mb-1">Ville *</label>
                 <input
                   type="text"
                   value={regCity}
                   onChange={(e) => setRegCity(e.target.value)}
                   placeholder="Abidjan"
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-bold text-gray-300 block mb-1">Mot de passe *</label>
+              <label className="text-xs font-bold text-[#172033] block mb-1">Mot de passe *</label>
               <input
                 type="password"
                 value={regPassword}
                 onChange={(e) => setRegPassword(e.target.value)}
                 placeholder="6 caractères minimum"
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
               />
             </div>
 
             <div>
-              <label className="text-xs font-bold text-gray-300 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Confirmer le mot de passe *
               </label>
               <input
@@ -736,14 +736,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 onChange={(e) => setRegConfirmPassword(e.target.value)}
                 placeholder="Répétez le mot de passe"
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 active:scale-99 transition-all cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-50"
+              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
               {isLoading
                 ? 'Traitement...'
@@ -753,7 +753,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
 
             <div className="pt-2 text-center text-xs">
-              <span className="text-gray-400">Déjà inscrit ? </span>
+              <span className="text-[#596273]">Déjà inscrit ? </span>
               <button
                 type="button"
                 onClick={() => {
@@ -761,7 +761,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setErrorMsg(null);
                   setSuccessMsg(null);
                 }}
-                className="font-bold text-[#D4AF37] hover:underline"
+                className="font-black text-[#C69A35] hover:underline"
               >
                 Se connecter
               </button>
@@ -772,22 +772,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* ---------------- MODE: SMS OTP VERIFICATION ---------------- */}
         {mode === 'SMS_VERIFY' && (
           <form onSubmit={handleVerifyRegisterOTP} className="py-4 space-y-3.5">
-            <div className="p-3.5 rounded-xl bg-[#181820] border border-zinc-800 text-xs">
-              <span className="text-gray-400 block mb-0.5">Code envoyé au numéro :</span>
-              <span className="font-bold text-white font-mono">{targetPhone}</span>
+            <div className="p-3.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-xs">
+              <span className="text-[#596273] block mb-0.5">Code envoyé au numéro :</span>
+              <span className="font-bold text-[#172033] font-mono">{targetPhone}</span>
             </div>
 
             {simulatedCode && (
-              <div className="p-2.5 rounded-lg bg-amber-950/40 border border-[#D4AF37]/30 text-[11px] text-[#D4AF37] flex items-center justify-between">
+              <div className="p-2.5 rounded-lg bg-amber-50 border border-[#C69A35]/30 text-[11px] text-[#A27B20] flex items-center justify-between">
                 <span>Code de confirmation reçu :</span>
-                <span className="font-mono font-bold tracking-widest text-white bg-black/60 px-2 py-0.5 rounded">
+                <span className="font-mono font-bold tracking-widest text-[#172033] bg-white border border-[#E5E8EF] px-2 py-0.5 rounded">
                   {simulatedCode}
                 </span>
               </div>
             )}
 
             <div>
-              <label className="text-xs font-bold text-gray-300 block mb-1">
+              <label className="text-xs font-bold text-[#172033] block mb-1">
                 Saisissez le code à 6 chiffres reçu *
               </label>
               <input
@@ -797,23 +797,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 onChange={(e) => setSmsOtpCode(e.target.value)}
                 placeholder="Ex: 123456"
                 required
-                className="w-full px-3.5 py-3 rounded-xl border border-zinc-700 bg-[#181820] text-center font-mono text-xl tracking-widest text-white focus:border-[#D4AF37] focus:outline-none"
+                className="w-full px-3.5 py-3 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-center font-mono text-xl tracking-widest text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 active:scale-99 transition-all cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-50"
+              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
               {isLoading ? 'Vérification en cours...' : 'Confirmer le code et valider mon compte'}
             </button>
 
-            <div className="flex items-center justify-between pt-2 text-xs text-gray-400">
+            <div className="flex items-center justify-between pt-2 text-xs text-[#596273]">
               <button
                 type="button"
                 onClick={() => setMode('REGISTER')}
-                className="hover:text-white"
+                className="hover:text-[#172033]"
               >
                 Changer de numéro
               </button>
@@ -835,7 +835,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }
                 }}
                 className={`font-semibold ${
-                  countdown > 0 ? 'text-gray-500 cursor-not-allowed' : 'text-[#D4AF37] hover:underline cursor-pointer'
+                  countdown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-[#C69A35] hover:underline cursor-pointer'
                 }`}
               >
                 {countdown > 0 ? `Renvoyer (${countdown}s)` : 'Renvoyer le code SMS'}
@@ -849,8 +849,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="py-4 space-y-3.5">
             {/* Method choice for password reset */}
             <div>
-              <label className="text-xs font-bold text-gray-300 block mb-1.5">Méthode de réinitialisation *</label>
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#181820] border border-zinc-800">
+              <label className="text-xs font-bold text-[#172033] block mb-1.5">Méthode de réinitialisation *</label>
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF]">
                 <button
                   type="button"
                   onClick={() => {
@@ -860,8 +860,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     forgotType === 'phone'
-                      ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-sm'
-                      : 'text-gray-400 hover:text-white'
+                      ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                      : 'text-[#596273] hover:text-[#172033]'
                   }`}
                 >
                   <Phone className="w-3.5 h-3.5" />
@@ -876,8 +876,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     forgotType === 'email'
-                      ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-sm'
-                      : 'text-gray-400 hover:text-white'
+                      ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                      : 'text-[#596273] hover:text-[#172033]'
                   }`}
                 >
                   <Mail className="w-3.5 h-3.5" />
@@ -889,24 +889,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {forgotType === 'phone' ? (
               forgotStep === 'request' ? (
                 <form onSubmit={handleForgotRequest} className="space-y-3">
-                  <p className="text-xs text-gray-300">
+                  <p className="text-xs text-[#596273]">
                     Saisissez le numéro de téléphone associé à votre compte. Un code SMS de réinitialisation vous sera envoyé.
                   </p>
                   <div>
-                    <label className="text-xs font-bold text-gray-300 block mb-1">Numéro de téléphone *</label>
+                    <label className="text-xs font-bold text-[#172033] block mb-1">Numéro de téléphone *</label>
                     <input
                       type="tel"
                       value={forgotPhone}
                       onChange={(e) => setForgotPhone(e.target.value)}
                       placeholder="Ex: +2250707070707"
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm font-mono"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm font-mono"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 cursor-pointer shadow-md disabled:opacity-50"
+                    className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 cursor-pointer shadow-md disabled:opacity-50"
                   >
                     {isLoading ? 'Envoi...' : 'Envoyer le code SMS'}
                   </button>
@@ -914,45 +914,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               ) : (
                 <form onSubmit={handleForgotVerifySMS} className="space-y-3">
                   <div>
-                    <label className="text-xs font-bold text-gray-300 block mb-1">Code reçu par SMS *</label>
+                    <label className="text-xs font-bold text-[#172033] block mb-1">Code reçu par SMS *</label>
                     <input
                       type="text"
                       value={forgotOtpCode}
                       onChange={(e) => setForgotOtpCode(e.target.value)}
                       placeholder="Code à 6 chiffres"
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white font-mono focus:border-[#D4AF37] focus:outline-none text-sm"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] font-mono focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-gray-300 block mb-1">Nouveau mot de passe *</label>
+                    <label className="text-xs font-bold text-[#172033] block mb-1">Nouveau mot de passe *</label>
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="6 caractères minimum"
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-gray-300 block mb-1">Confirmer le nouveau mot de passe *</label>
+                    <label className="text-xs font-bold text-[#172033] block mb-1">Confirmer le nouveau mot de passe *</label>
                     <input
                       type="password"
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
                       placeholder="Répétez le nouveau mot de passe"
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 cursor-pointer shadow-md disabled:opacity-50"
+                    className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 cursor-pointer shadow-md disabled:opacity-50"
                   >
                     {isLoading ? 'Mise à jour...' : 'Réinitialiser mon mot de passe'}
                   </button>
@@ -960,24 +960,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               )
             ) : (
               <form onSubmit={handleForgotRequest} className="space-y-3">
-                <p className="text-xs text-gray-300">
+                <p className="text-xs text-[#596273]">
                   Saisissez votre adresse e-mail. Nous vous enverrons un lien sécurisé pour définir un nouveau mot de passe.
                 </p>
                 <div>
-                  <label className="text-xs font-bold text-gray-300 block mb-1">Adresse e-mail *</label>
+                  <label className="text-xs font-bold text-[#172033] block mb-1">Adresse e-mail *</label>
                   <input
                     type="email"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="amadou.kone@gmail.com"
                     required
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-base text-white focus:border-[#D4AF37] focus:outline-none text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 cursor-pointer shadow-md disabled:opacity-50"
+                  className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 cursor-pointer shadow-md disabled:opacity-50"
                 >
                   {isLoading ? 'Envoi...' : 'Envoyer le lien de réinitialisation'}
                 </button>
@@ -991,7 +991,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setErrorMsg(null);
                 setSuccessMsg(null);
               }}
-              className="w-full text-center text-xs text-gray-400 hover:text-white pt-2 cursor-pointer"
+              className="w-full text-center text-xs text-[#596273] hover:text-[#172033] pt-2 cursor-pointer font-medium"
             >
               Retour à la connexion
             </button>

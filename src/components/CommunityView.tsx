@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  fetchPosts, createPost, updatePost, deletePost, togglePostLike,
+  fetchPosts, createPost, updatePost, deletePost,
   fetchComments, createComment, updateComment, deleteComment,
   blockUser, submitReport, uploadWebpImage, subscribeToRealtime,
   PostData, CommentData
 } from '../lib/supabaseData';
 import { 
-  Heart, MessageSquare, Send, ShieldCheck, MoreVertical, 
-  Trash2, Edit, Flag, Ban, Image as ImageIcon, X, CornerDownRight, ExternalLink
+  MessageSquare, Send, ShieldCheck, MoreVertical, 
+  Trash2, Edit, Flag, Ban, Image as ImageIcon, X, 
+  Share2, Repeat2, ExternalLink
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { isValidUuid } from '../lib/storage';
+import { PostReactionsBar } from './social/PostReactionsBar';
+import { PostReactorsModal } from './social/PostReactorsModal';
+import { PostShareModal } from './social/PostShareModal';
+import { 
+  PostSocialStats, ReactorItem, fetchBatchSocialStats, 
+  recordPostShare, REACTION_CONFIGS, ReactionType 
+} from '../lib/socialApi';
 
 interface CommunityViewProps {
   currentUserId?: string;
@@ -27,6 +35,19 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 }) => {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Social Stats map (postId -> stats)
+  const [socialStatsMap, setSocialStatsMap] = useState<Record<string, PostSocialStats>>({});
+
+  // Reactors Modal State
+  const [activeReactorsModal, setActiveReactorsModal] = useState<{
+    postId: string;
+    reactors: ReactorItem[];
+    stats: PostSocialStats;
+  } | null>(null);
+
+  // Share Modal State
+  const [sharingPost, setSharingPost] = useState<PostData | null>(null);
 
   // New post state
   const [newPostContent, setNewPostContent] = useState('');
@@ -45,7 +66,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
 
-  // Fluid transition tracking for newly added posts and comments
+  // Fluid transition tracking
   const [newlyCreatedPostId, setNewlyCreatedPostId] = useState<string | null>(null);
   const [newlyCreatedCommentId, setNewlyCreatedCommentId] = useState<string | null>(null);
 
@@ -59,9 +80,21 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
   const loadPosts = async () => {
     setLoading(true);
-    const data = await fetchPosts(currentUserId);
-    setPosts(data);
-    setLoading(false);
+    try {
+      const data = await fetchPosts(currentUserId);
+      setPosts(data);
+
+      // Load batch reactions & shares
+      if (data.length > 0) {
+        const postIds = data.map((p) => p.id);
+        const stats = await fetchBatchSocialStats(postIds, currentUserId);
+        setSocialStatsMap(stats);
+      }
+    } catch (err) {
+      console.error('Error loading posts:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -136,19 +169,60 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
     }
   };
 
-  const handleLike = async (postId: string) => {
+  // Handle Share to Social Feed
+  const handleExecuteShareToFeed = async (originalPost: PostData, commentary: string) => {
     const authUid = await getAuthUserId();
     if (!authUid) {
       onRequireAuth();
       return;
     }
 
-    try {
-      await togglePostLike(postId, authUid);
-      await loadPosts();
-    } catch (err: any) {
-      console.error('Like error:', err);
+    // Embed structured reference to original post
+    const sharedData = {
+      originalPostId: originalPost.id,
+      originalAuthorName: originalPost.author?.full_name || 'Membre Afrique Business',
+      originalAuthorAvatar: originalPost.author?.avatar_url,
+      originalAuthorVerified: Boolean(originalPost.author?.phone_verified),
+      originalAuthorCity: originalPost.author?.city,
+      originalContent: originalPost.content,
+      originalImages: originalPost.images || [],
+      originalCreatedAt: originalPost.created_at,
+    };
+
+    const combinedContent = commentary.trim() 
+      ? `${commentary.trim()}\n\n[SHARED_POST_DATA:${JSON.stringify(sharedData)}]`
+      : `[SHARED_POST_DATA:${JSON.stringify(sharedData)}]`;
+
+    // Create real post in Supabase
+    const newPost = await createPost(authUid, combinedContent, []);
+
+    // Record share in backend
+    const shareRes = await recordPostShare(
+      originalPost.id,
+      authUid,
+      'social_feed',
+      commentary,
+      newPost.id
+    );
+
+    // Optimistically increment share count
+    if (shareRes) {
+      setSocialStatsMap((prev) => {
+        const existing = prev[originalPost.id];
+        if (!existing) return prev;
+        return {
+          ...prev,
+          [originalPost.id]: {
+            ...existing,
+            sharesCount: shareRes.sharesCount,
+          },
+        };
+      });
     }
+
+    await loadPosts();
+    setNewlyCreatedPostId(newPost.id);
+    setTimeout(() => setNewlyCreatedPostId(null), 3000);
   };
 
   const handleToggleComments = async (postId: string) => {
@@ -274,40 +348,61 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-3.5 sm:px-6 py-4 pb-28 space-y-4 text-white">
-      {/* Create Post Header */}
-      <div className="p-4 rounded-2xl bg-[#131317] border border-zinc-800 shadow-md">
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-          Fil Communautaire Panafricain
-        </h3>
+    <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 pb-28 space-y-4 bg-[#F8F9FC] text-[#172033] min-h-screen">
+      {/* Create Post Header Card */}
+      <div className="p-4 rounded-2xl bg-white border border-[#E5E8EF] shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-[#172033] uppercase tracking-wider flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#C69A35]"></span>
+            <span>Fil Social Panafricain</span>
+          </h3>
+          <span className="text-[11px] font-medium text-[#596273]">
+            Échanges, opportunités & commerçants
+          </span>
+        </div>
+
         <form onSubmit={handleCreatePost} className="space-y-3">
-          <textarea
-            rows={2}
-            value={newPostContent}
-            onChange={(e) => setNewPostContent(e.target.value)}
-            onClick={() => {
-              if (!currentUserId || !isValidUuid(currentUserId)) {
-                onRequireAuth();
+          <div className="flex items-start gap-3">
+            {currentUserAvatar ? (
+              <img
+                src={currentUserAvatar}
+                alt=""
+                className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF] shrink-0 mt-0.5"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-xs shrink-0 mt-0.5">
+                {currentUserName ? currentUserName[0].toUpperCase() : 'AB'}
+              </div>
+            )}
+
+            <textarea
+              rows={2}
+              value={newPostContent}
+              onChange={(e) => setNewPostContent(e.target.value)}
+              onClick={() => {
+                if (!currentUserId || !isValidUuid(currentUserId)) {
+                  onRequireAuth();
+                }
+              }}
+              placeholder={
+                currentUserId && isValidUuid(currentUserId)
+                  ? "Partagez une actualité commerciale, arrivage de conteneurs, opportunités d'affaires..."
+                  : "Connectez-vous pour publier un message sur le fil..."
               }
-            }}
-            placeholder={
-              currentUserId && isValidUuid(currentUserId)
-                ? "Partagez une actualité commerciale, arrivage de conteneurs, opportunités d'affaires..."
-                : "Connectez-vous pour publier un message sur le fil..."
-            }
-            className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#17171C] text-base text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none"
-          />
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-sm text-[#172033] placeholder-[#596273] focus:bg-white focus:border-[#C69A35] focus:outline-none transition-colors"
+            />
+          </div>
 
           {/* Attached Images preview */}
           {newPostImages.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto py-1">
+            <div className="flex gap-2 overflow-x-auto py-1 pl-13">
               {newPostImages.map((img, i) => (
-                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+                <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E5E8EF] shrink-0 shadow-xs">
                   <img src={img} alt="" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setNewPostImages((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/80 text-white"
+                    className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white hover:bg-black"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -316,7 +411,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-1 pl-0 sm:pl-13 border-t border-[#E5E8EF]/60">
             <label 
               onClick={(e) => {
                 if (!currentUserId || !isValidUuid(currentUserId)) {
@@ -324,10 +419,10 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                   onRequireAuth();
                 }
               }}
-              className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-[#D4AF37] cursor-pointer transition-colors"
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#596273] hover:text-[#C69A35] cursor-pointer transition-colors p-1.5 rounded-lg hover:bg-[#F8F9FC]"
             >
-              <ImageIcon className="w-4 h-4 text-[#D4AF37]" />
-              <span>{isUploadingPhoto ? 'Compression...' : 'Photo'}</span>
+              <ImageIcon className="w-4 h-4 text-[#C69A35]" />
+              <span>{isUploadingPhoto ? 'Compression...' : 'Ajouter une photo'}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -340,7 +435,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <button
               type="submit"
               disabled={isPublishing || !newPostContent.trim()}
-              className="px-4 py-2 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer disabled:opacity-50 min-h-[40px]"
+              className="px-4 py-2 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-bold hover:brightness-105 flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-40 min-h-[38px] transition-all active:scale-95"
             >
               <Send className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>{isPublishing ? 'Envoi...' : 'Publier'}</span>
@@ -351,14 +446,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
       {/* Posts List */}
       {loading ? (
-        <div className="py-12 text-center text-xs text-gray-400">
-          Chargement du fil social...
+        <div className="py-12 text-center text-xs text-[#596273]">
+          Chargement du fil social panafricain...
         </div>
       ) : posts.length === 0 ? (
-        <div className="p-8 rounded-2xl bg-[#131317] border border-zinc-800 text-center space-y-2">
-          <MessageSquare className="w-8 h-8 text-[#D4AF37] mx-auto opacity-70" />
-          <h4 className="text-sm font-bold text-white">Aucune publication pour le moment</h4>
-          <p className="text-xs text-gray-400">
+        <div className="p-8 rounded-2xl bg-white border border-[#E5E8EF] text-center space-y-2 shadow-xs">
+          <MessageSquare className="w-8 h-8 text-[#C69A35] mx-auto opacity-70" />
+          <h4 className="text-sm font-bold text-[#172033]">Aucune publication pour le moment</h4>
+          <p className="text-xs text-[#596273]">
             Soyez le premier à partager une opportunité avec la communauté panafricaine !
           </p>
         </div>
@@ -366,41 +461,85 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
         <div className="space-y-4">
           {posts.map((post) => {
             const isAuthor = currentUserId && post.user_id === currentUserId;
-            const authorInitials = post.author?.full_name
-              ? post.author.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-              : 'AB';
+            const authorName = post.author?.full_name || 'Membre Afrique Business';
+            const authorInitials = authorName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+
+            // Extract Shared Post metadata if present
+            const sharedMatch = post.content.match(/\[SHARED_POST_DATA:([\s\S]+?)\]/);
+            let sharedData: any = null;
+            let displayContent = post.content;
+
+            if (sharedMatch) {
+              try {
+                sharedData = JSON.parse(sharedMatch[1]);
+                displayContent = post.content.replace(/\[SHARED_POST_DATA:[\s\S]+?\]/, '').trim();
+              } catch (e) {
+                console.warn('Error parsing shared post data:', e);
+              }
+            }
+
+            // Fallback: cleanup facebook tags
+            const hasFb = /\[FB_POST_ID:[^\]]+\]/.test(displayContent) || /Publié par\s*:/i.test(displayContent);
+            if (hasFb) {
+              displayContent = displayContent
+                .replace(/\[FB_POST_ID:[^\]]+\]/g, '')
+                .replace(/---\s*📢\s*Publié par[^\n]+/gi, '')
+                .replace(/🔗\s*Voir sur Facebook[^\n]+/gi, '')
+                .trim();
+            }
+
+            const postStats = socialStatsMap[post.id] || {
+              postId: post.id,
+              reactionsCount: post.likes_count,
+              reactionBreakdown: { like: post.likes_count, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+              activeEmojis: post.likes_count > 0 ? (['like'] as ReactionType[]) : [],
+              userReaction: post.is_liked ? 'like' : null,
+              sharesCount: 0,
+              recentReactors: [],
+            };
 
             return (
-              <div
+              <article
                 key={post.id}
-                className={`p-4 rounded-2xl bg-[#131317] border shadow-md space-y-3 transition-all duration-300 ${
+                id={`post-${post.id}`}
+                className={`p-4 rounded-2xl bg-white border shadow-xs space-y-3 transition-all duration-300 ${
                   post.id === newlyCreatedPostId
-                    ? 'animate-fade-slide-up border-[#D4AF37] shadow-amber-500/10'
-                    : 'border-zinc-800 hover:border-zinc-700/80'
+                    ? 'animate-fade-slide-up border-[#C69A35] shadow-md shadow-[#C69A35]/10'
+                    : 'border-[#E5E8EF] hover:border-[#E5E8EF]'
                 }`}
               >
-                {/* Author & Menu */}
+                {/* Repost Header if Shared */}
+                {sharedData && (
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-[#E5E8EF]/70 text-xs font-semibold text-[#596273]">
+                    <Repeat2 className="w-3.5 h-3.5 text-[#C69A35]" />
+                    <span>
+                      Partagé par <strong className="text-[#172033]">{authorName}</strong>
+                    </span>
+                  </div>
+                )}
+
+                {/* Author Info & Dropdown Menu */}
                 <div className="flex items-center justify-between relative">
                   <div className="flex items-center gap-3">
                     {post.author?.avatar_url ? (
                       <img
                         src={post.author.avatar_url}
                         alt=""
-                        className="w-10 h-10 rounded-full object-cover border border-[#D4AF37]/40 bg-zinc-900"
+                        className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF] bg-[#F1F4F9]"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#D4AF37] to-[#F59E0B] text-black font-extrabold flex items-center justify-center text-xs">
+                      <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold flex items-center justify-center text-xs">
                         {authorInitials}
                       </div>
                     )}
                     <div>
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1">
-                        <span>{post.author?.full_name || 'Membre'}</span>
+                      <h4 className="text-xs font-bold text-[#172033] flex items-center gap-1">
+                        <span>{authorName}</span>
                         {post.author?.phone_verified && (
-                          <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#C69A35]" />
                         )}
                       </h4>
-                      <span className="text-[10px] text-gray-400">
+                      <span className="text-[10px] text-[#596273]">
                         {post.author?.city ? `${post.author.city} · ` : ''}
                         {new Date(post.created_at).toLocaleDateString('fr-FR', {
                           day: 'numeric',
@@ -412,16 +551,17 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                     </div>
                   </div>
 
+                  {/* Context Menu */}
                   <div className="relative">
                     <button
                       onClick={() => setActiveMenuId(activeMenuId === post.id ? null : post.id)}
-                      className="p-1 rounded-full text-gray-400 hover:text-white cursor-pointer"
+                      className="p-1 rounded-full text-[#596273] hover:text-[#172033] hover:bg-[#F8F9FC] cursor-pointer"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
                     {activeMenuId === post.id && (
-                      <div className="absolute right-0 top-6 w-36 rounded-xl bg-[#1B1B22] border border-zinc-700 shadow-xl py-1 z-20 text-xs">
+                      <div className="absolute right-0 top-6 w-38 rounded-xl bg-white border border-[#E5E8EF] shadow-lg py-1 z-20 text-xs">
                         {isAuthor ? (
                           <>
                             <button
@@ -430,14 +570,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                                 setEditingPostContent(post.content);
                                 setActiveMenuId(null);
                               }}
-                              className="w-full px-3 py-1.5 text-left text-gray-200 hover:bg-zinc-800 flex items-center gap-1.5"
+                              className="w-full px-3 py-1.5 text-left text-[#172033] hover:bg-[#F8F9FC] flex items-center gap-1.5"
                             >
-                              <Edit className="w-3.5 h-3.5 text-[#D4AF37]" />
+                              <Edit className="w-3.5 h-3.5 text-[#C69A35]" />
                               <span>Modifier</span>
                             </button>
                             <button
                               onClick={() => handleDeletePost(post.id)}
-                              className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-1.5"
+                              className="w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 flex items-center gap-1.5"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>Supprimer</span>
@@ -450,14 +590,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                                 setReportingPostId(post.id);
                                 setActiveMenuId(null);
                               }}
-                              className="w-full px-3 py-1.5 text-left text-gray-200 hover:bg-zinc-800 flex items-center gap-1.5"
+                              className="w-full px-3 py-1.5 text-left text-[#172033] hover:bg-[#F8F9FC] flex items-center gap-1.5"
                             >
-                              <Flag className="w-3.5 h-3.5 text-amber-400" />
+                              <Flag className="w-3.5 h-3.5 text-amber-500" />
                               <span>Signaler</span>
                             </button>
                             <button
                               onClick={() => handleBlockAuthor(post.user_id)}
-                              className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-1.5"
+                              className="w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 flex items-center gap-1.5"
                             >
                               <Ban className="w-3.5 h-3.5" />
                               <span>Bloquer l'auteur</span>
@@ -476,85 +616,118 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       rows={3}
                       value={editingPostContent}
                       onChange={(e) => setEditingPostContent(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#17171C] border border-zinc-700 text-xs text-white"
+                      className="w-full px-3 py-2 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-xs text-[#172033] focus:bg-white focus:border-[#C69A35]"
                     />
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => setEditingPostId(null)}
-                        className="px-3 py-1 rounded-lg bg-zinc-800 text-xs text-gray-300"
+                        className="px-3 py-1 rounded-lg bg-[#F1F4F9] text-xs text-[#596273] hover:text-[#172033]"
                       >
                         Annuler
                       </button>
                       <button
                         onClick={() => handleSaveEditPost(post.id)}
-                        className="px-3 py-1 rounded-lg bg-[#D4AF37] text-black font-bold text-xs"
+                        className="px-3 py-1 rounded-lg bg-[#C69A35] text-[#172033] font-bold text-xs shadow-xs"
                       >
                         Enregistrer
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <p className="text-xs sm:text-sm text-gray-200 leading-relaxed whitespace-pre-line">
-                      {(() => {
-                        const hasFb = /\[FB_POST_ID:[^\]]+\]/.test(post.content) || /Publié par\s*:/i.test(post.content);
-                        if (!hasFb) return post.content;
-                        return post.content
-                          .replace(/\[FB_POST_ID:[^\]]+\]/g, '')
-                          .replace(/---\s*📢\s*Publié par[^\n]+/gi, '')
-                          .replace(/🔗\s*Voir sur Facebook[^\n]+/gi, '')
-                          .trim();
-                      })()}
-                    </p>
+                  <div className="space-y-3">
+                    {/* Primary text content */}
+                    {displayContent && (
+                      <p className="text-xs sm:text-sm text-[#172033] leading-relaxed whitespace-pre-line font-normal">
+                        {displayContent}
+                      </p>
+                    )}
 
-                    {/* Facebook Attribution */}
-                    {(() => {
-                      const pageMatch = post.content.match(/Publié par\s*:\s*([^\n\r]+)/i);
-                      const urlMatch = post.content.match(/(?:Voir sur Facebook\s*:\s*|Lien Facebook\s*:\s*)(https?:\/\/[^\s\n\r]+)/i);
-                      const hasFb = /\[FB_POST_ID:[^\]]+\]/.test(post.content) || pageMatch;
-                      if (!hasFb) return null;
-
-                      const pageName = pageMatch ? pageMatch[1].trim() : 'Page Facebook';
-                      const fbUrl = urlMatch ? urlMatch[1].trim() : null;
-
-                      return (
-                        <div className="mt-2.5 p-2.5 rounded-xl bg-[#1877F2]/10 border border-[#1877F2]/30 flex items-center justify-between gap-2">
+                    {/* EMBEDDED SHARED POST CARD */}
+                    {sharedData && (
+                      <div className="p-3.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] space-y-2.5 shadow-xs">
+                        {/* Original Author */}
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-lg bg-[#1877F2] text-white flex items-center justify-center shrink-0">
-                              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                              </svg>
+                            {sharedData.originalAuthorAvatar ? (
+                              <img
+                                src={sharedData.originalAuthorAvatar}
+                                alt=""
+                                className="w-8 h-8 rounded-full object-cover border border-[#E5E8EF]"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-[#C69A35] text-[#172033] font-bold text-[10px] flex items-center justify-center">
+                                {sharedData.originalAuthorName[0]}
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-bold text-[#172033]">
+                                  {sharedData.originalAuthorName}
+                                </span>
+                                {sharedData.originalAuthorVerified && (
+                                  <ShieldCheck className="w-3.5 h-3.5 text-[#C69A35]" />
+                                )}
+                              </div>
+                              <span className="text-[10px] text-[#596273]">
+                                {sharedData.originalCreatedAt
+                                  ? new Date(sharedData.originalCreatedAt).toLocaleDateString('fr-FR', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                    })
+                                  : 'Publication originale'}
+                              </span>
                             </div>
-                            <span className="text-[11px] font-bold text-gray-200">
-                              Publié par <strong className="text-white">{pageName}</strong>
-                            </span>
                           </div>
-                          {fbUrl && (
-                            <a
-                              href={fbUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2.5 py-1 rounded-lg bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-[10px] inline-flex items-center gap-1 shrink-0 transition-colors"
-                            >
-                              <span>Voir sur Facebook</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
+
+                          <a
+                            href={`#post-${sharedData.originalPostId}`}
+                            className="text-[10px] font-bold text-[#C69A35] hover:underline flex items-center gap-1"
+                          >
+                            <span>Voir l'original</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
                         </div>
-                      );
-                    })()}
+
+                        {/* Original Content */}
+                        <p className="text-xs text-[#172033] leading-relaxed whitespace-pre-line">
+                          {sharedData.originalContent}
+                        </p>
+
+                        {/* Original Images */}
+                        {sharedData.originalImages && sharedData.originalImages.length > 0 && (
+                          <div className="grid grid-cols-2 gap-2 rounded-xl overflow-hidden pt-1">
+                            {sharedData.originalImages.map((img: string, idx: number) => (
+                              <div
+                                key={idx}
+                                className="relative aspect-video bg-[#F1F4F9] rounded-lg overflow-hidden border border-[#E5E8EF]"
+                              >
+                                <img
+                                  src={img}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Post Images */}
-                {post.images && post.images.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 rounded-xl overflow-hidden">
+                {/* Direct Post Images (if not already embedded in shared card) */}
+                {!sharedData && post.images && post.images.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 rounded-xl overflow-hidden pt-1">
                     {post.images.map((img, idx) => (
-                      <div key={idx} className="relative aspect-video bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800">
-                        <img 
-                          src={img} 
-                          alt="Photo publication" 
-                          className="w-full h-full object-cover" 
+                      <div
+                        key={idx}
+                        className="relative aspect-video bg-[#F1F4F9] rounded-lg overflow-hidden border border-[#E5E8EF]"
+                      >
+                        <img
+                          src={img}
+                          alt="Photo publication"
+                          className="w-full h-full object-cover"
                           loading="lazy"
                           onError={(e) => {
                             (e.target as HTMLElement).style.display = 'none';
@@ -565,30 +738,105 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                   </div>
                 )}
 
-                {/* Like & Comments Stats Bar */}
-                <div className="flex items-center gap-4 pt-2 border-t border-zinc-800/80">
-                  <button
-                    onClick={() => handleLike(post.id)}
-                    className={`flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                      post.is_liked ? 'text-[#D4AF37]' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Heart className={`w-4 h-4 ${post.is_liked ? 'fill-current' : ''}`} />
-                    <span>{post.likes_count}</span>
-                  </button>
+                {/* STATS COUNTERS ROW (Reactions, Comments, Shares) */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#E5E8EF] text-xs text-[#596273]">
+                  {/* Left: Reactions detail */}
+                  <div className="flex items-center gap-1.5">
+                    {postStats.reactionsCount > 0 ? (
+                      <button
+                        onClick={() =>
+                          setActiveReactorsModal({
+                            postId: post.id,
+                            reactors: postStats.recentReactors,
+                            stats: postStats,
+                          })
+                        }
+                        className="flex items-center gap-1 hover:text-[#172033] cursor-pointer"
+                      >
+                        <div className="flex -space-x-1 items-center">
+                          {postStats.activeEmojis.slice(0, 3).map((type) => (
+                            <span
+                              key={type}
+                              className="w-4 h-4 rounded-full bg-white flex items-center justify-center text-[10px] shadow-xs border border-[#E5E8EF]"
+                            >
+                              {REACTION_CONFIGS[type].emoji}
+                            </span>
+                          ))}
+                        </div>
+                        <span className="font-semibold text-[#172033] tabular-nums">
+                          {postStats.reactionsCount}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-[#596273]">0 réaction</span>
+                    )}
+                  </div>
 
+                  {/* Right: Comments and Shares counters */}
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <button
+                      onClick={() => handleToggleComments(post.id)}
+                      className="hover:text-[#172033] cursor-pointer"
+                    >
+                      <strong className="text-[#172033]">{post.comments_count}</strong>{' '}
+                      commentaire{post.comments_count > 1 ? 's' : ''}
+                    </button>
+
+                    <span>·</span>
+
+                    <button
+                      onClick={() => setSharingPost(post)}
+                      className="hover:text-[#172033] cursor-pointer"
+                    >
+                      <strong className="text-[#172033]">{postStats.sharesCount}</strong>{' '}
+                      partage{postStats.sharesCount > 1 ? 's' : ''}
+                    </button>
+                  </div>
+                </div>
+
+                {/* INTERACTIVE ACTION BUTTONS: Reaction, Comment, Share */}
+                <div className="grid grid-cols-3 gap-1 pt-1 border-t border-[#E5E8EF]/80">
+                  {/* 1. Facebook-style Reactions Button */}
+                  <div className="flex justify-center">
+                    <PostReactionsBar
+                      postId={post.id}
+                      currentUserId={currentUserId}
+                      currentUserName={currentUserName}
+                      currentUserAvatar={currentUserAvatar}
+                      initialStats={postStats}
+                      onRequireAuth={onRequireAuth}
+                      onOpenReactorsModal={(reactors, stats) =>
+                        setActiveReactorsModal({
+                          postId: post.id,
+                          reactors,
+                          stats,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {/* 2. Comment Button */}
                   <button
                     onClick={() => handleToggleComments(post.id)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-bold text-[#596273] hover:text-[#172033] hover:bg-[#F8F9FC] transition-colors cursor-pointer min-h-[38px]"
                   >
                     <MessageSquare className="w-4 h-4" />
-                    <span>{post.comments_count} commentaires</span>
+                    <span>Commenter</span>
+                  </button>
+
+                  {/* 3. Share Button */}
+                  <button
+                    onClick={() => setSharingPost(post)}
+                    className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-bold text-[#596273] hover:text-[#172033] hover:bg-[#F8F9FC] transition-colors cursor-pointer min-h-[38px]"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>Partager</span>
                   </button>
                 </div>
 
                 {/* Expanded Comments Section */}
                 {expandedPostId === post.id && (
-                  <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+                  <div className="pt-3 border-t border-[#E5E8EF] space-y-3">
                     {/* Add comment */}
                     <div className="flex items-center gap-2">
                       <input
@@ -596,32 +844,32 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         value={newCommentContent}
                         onChange={(e) => setNewCommentContent(e.target.value)}
                         placeholder="Écrire un commentaire..."
-                        className="flex-1 px-3 py-2 rounded-xl bg-[#17171C] border border-zinc-700 text-base sm:text-xs text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none"
+                        className="flex-1 px-3 py-2 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-xs text-[#172033] placeholder-[#596273] focus:bg-white focus:border-[#C69A35] focus:outline-none"
                       />
                       <button
                         onClick={() => handleCreateComment(post.id)}
                         disabled={!newCommentContent.trim()}
-                        className="p-2 rounded-xl bg-[#D4AF37] text-black hover:bg-[#F59E0B] disabled:opacity-40 transition-colors"
+                        className="p-2 rounded-xl bg-[#C69A35] text-[#172033] hover:brightness-105 disabled:opacity-40 transition-all shadow-xs cursor-pointer"
                       >
                         <Send className="w-4 h-4 stroke-[2.5]" />
                       </button>
                     </div>
 
                     {/* Comments list */}
-                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
                       {(commentsMap[post.id] || []).map((comment) => {
                         const isCommentAuthor = currentUserId && comment.user_id === currentUserId;
                         return (
                           <div
                             key={comment.id}
-                            className={`p-2.5 rounded-xl bg-[#181820] text-xs space-y-1 transition-all duration-300 ${
+                            className={`p-2.5 rounded-xl bg-[#F8F9FC] text-xs space-y-1 transition-all duration-300 border border-[#E5E8EF] ${
                               comment.id === newlyCreatedCommentId
-                                ? 'animate-comment-slide-in border border-[#D4AF37]/70 shadow-sm'
-                                : 'border border-zinc-800/60'
+                                ? 'animate-comment-slide-in border-[#C69A35] shadow-xs'
+                                : ''
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-gray-200">
+                              <span className="font-bold text-[#172033]">
                                 {comment.author?.full_name || 'Membre'}
                               </span>
                               {isCommentAuthor && (
@@ -631,13 +879,13 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                                       setEditingCommentId(comment.id);
                                       setEditingCommentContent(comment.content);
                                     }}
-                                    className="text-[10px] text-gray-400 hover:text-[#D4AF37]"
+                                    className="text-[10px] text-[#596273] hover:text-[#C69A35]"
                                   >
                                     Modifier
                                   </button>
                                   <button
                                     onClick={() => handleDeleteComment(post.id, comment.id)}
-                                    className="text-[10px] text-gray-400 hover:text-red-400"
+                                    className="text-[10px] text-[#596273] hover:text-red-600"
                                   >
                                     Supprimer
                                   </button>
@@ -651,72 +899,130 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                                   type="text"
                                   value={editingCommentContent}
                                   onChange={(e) => setEditingCommentContent(e.target.value)}
-                                  className="w-full px-2 py-1 rounded-lg bg-[#121216] border border-zinc-700 text-xs text-white"
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#E5E8EF] text-xs text-[#172033]"
                                 />
                                 <div className="flex justify-end gap-1.5">
                                   <button
                                     onClick={() => setEditingCommentId(null)}
-                                    className="text-[10px] px-2 py-0.5 rounded bg-zinc-800"
+                                    className="px-2 py-0.5 rounded text-[10px] text-[#596273]"
                                   >
                                     Annuler
                                   </button>
                                   <button
                                     onClick={() => handleSaveEditComment(post.id, comment.id)}
-                                    className="text-[10px] px-2 py-0.5 rounded bg-[#D4AF37] text-black font-bold"
+                                    className="px-2 py-0.5 rounded bg-[#C69A35] text-[#172033] font-bold text-[10px]"
                                   >
-                                    Enregistrer
+                                    OK
                                   </button>
                                 </div>
                               </div>
                             ) : (
-                              <p className="text-gray-300">{comment.content}</p>
+                              <p className="text-[#172033] leading-relaxed">{comment.content}</p>
                             )}
+
+                            <span className="text-[9px] text-[#596273] block">
+                              {new Date(comment.created_at).toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                 )}
-              </div>
+              </article>
             );
           })}
         </div>
       )}
 
-      {/* Report Modal */}
+      {/* REACTORS MODAL */}
+      {activeReactorsModal && (
+        <PostReactorsModal
+          isOpen={Boolean(activeReactorsModal)}
+          onClose={() => setActiveReactorsModal(null)}
+          reactors={activeReactorsModal.reactors}
+          reactionBreakdown={activeReactorsModal.stats.reactionBreakdown}
+          totalCount={activeReactorsModal.stats.reactionsCount}
+        />
+      )}
+
+      {/* SHARE MODAL */}
+      {sharingPost && (
+        <PostShareModal
+          isOpen={Boolean(sharingPost)}
+          onClose={() => setSharingPost(null)}
+          post={sharingPost}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          currentUserAvatar={currentUserAvatar}
+          onShareToFeed={(commentary) => handleExecuteShareToFeed(sharingPost, commentary)}
+          onExternalShareRecord={(type) => {
+            if (currentUserId) {
+              recordPostShare(sharingPost.id, currentUserId, type as any);
+              setSocialStatsMap((prev) => {
+                const existing = prev[sharingPost.id];
+                if (!existing) return prev;
+                return {
+                  ...prev,
+                  [sharingPost.id]: {
+                    ...existing,
+                    sharesCount: existing.sharesCount + 1,
+                  },
+                };
+              });
+            }
+          }}
+        />
+      )}
+
+      {/* REPORT POST MODAL */}
       {reportingPostId && (
-        <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[#141418] border border-zinc-800 p-5 text-white">
-            <h4 className="text-sm font-bold mb-3 flex items-center gap-2 text-red-400">
-              <Flag className="w-4 h-4" />
-              <span>Signaler cette publication</span>
-            </h4>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-white rounded-2xl border border-[#E5E8EF] p-4 space-y-3 shadow-xl text-[#172033]">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-[#172033] flex items-center gap-1.5">
+                <Flag className="w-4 h-4 text-amber-500" />
+                <span>Signaler cette publication</span>
+              </h4>
+              <button onClick={() => setReportingPostId(null)} className="text-[#596273] hover:text-[#172033]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
             {reportFeedback ? (
-              <p className="text-xs text-[#D4AF37] py-4 text-center">{reportFeedback}</p>
+              <div className="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold text-center">
+                {reportFeedback}
+              </div>
             ) : (
               <div className="space-y-3">
                 <select
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1A1A22] border border-zinc-700 text-xs text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-xs text-[#172033]"
                 >
                   <option value="Contenu inapproprié">Contenu inapproprié</option>
-                  <option value="Arnaque ou escroquerie">Arnaque ou escroquerie</option>
-                  <option value="Spam ou publicité abusive">Spam ou publicité abusive</option>
-                  <option value="Harcèlement ou diffamation">Harcèlement ou diffamation</option>
+                  <option value="Arnaque ou fraude">Arnaque ou fraude</option>
+                  <option value="Harcèlement ou propos haineux">Harcèlement ou propos haineux</option>
+                  <option value="Fausse opportunité ou spam">Fausse opportunité ou spam</option>
                 </select>
-                <div className="flex justify-end gap-2 pt-2">
+
+                <div className="flex justify-end gap-2 pt-1">
                   <button
                     onClick={() => setReportingPostId(null)}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-800 text-xs"
+                    className="px-3 py-1.5 rounded-lg text-xs text-[#596273] hover:text-[#172033]"
                   >
                     Annuler
                   </button>
                   <button
                     onClick={handleSubmitReportPost}
-                    className="px-3 py-1.5 rounded-lg bg-red-600 text-xs font-bold"
+                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs"
                   >
-                    Confirmer
+                    Signaler
                   </button>
                 </div>
               </div>

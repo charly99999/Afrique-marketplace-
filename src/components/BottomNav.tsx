@@ -15,15 +15,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   unreadMessagesCount = 0,
 }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#101010]/95 backdrop-blur-md border-t border-[#262626] pb-safe shadow-2xl max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E5E8EF] pb-safe shadow-lg max-w-lg mx-auto">
       <div className="grid grid-cols-5 items-center h-16 px-1">
         {/* Accueil */}
         <button
           onClick={() => onTabChange('feed')}
           className={`flex flex-col items-center justify-center min-h-[48px] transition-colors cursor-pointer ${
             activeTab === 'feed'
-              ? 'text-[#F5A623] font-bold'
-              : 'text-gray-400 font-medium hover:text-gray-200'
+              ? 'text-[#C69A35] font-bold'
+              : 'text-[#596273] font-medium hover:text-[#172033]'
           }`}
         >
           <Home className={`w-5 h-5 ${activeTab === 'feed' ? 'stroke-[2.5]' : 'stroke-2'}`} />
@@ -35,24 +35,24 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           onClick={() => onTabChange('explore')}
           className={`flex flex-col items-center justify-center min-h-[48px] transition-colors cursor-pointer ${
             activeTab === 'explore'
-              ? 'text-[#F5A623] font-bold'
-              : 'text-gray-400 font-medium hover:text-gray-200'
+              ? 'text-[#C69A35] font-bold'
+              : 'text-[#596273] font-medium hover:text-[#172033]'
           }`}
         >
           <Compass className={`w-5 h-5 ${activeTab === 'explore' ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[10px] mt-1 tracking-tight">Explorer</span>
         </button>
 
-        {/* Vendre (Bouton rond or au centre) */}
+        {/* Vendre (Bouton rond or au centre avec bordure blanche pure) */}
         <div className="flex flex-col items-center justify-center relative -top-3">
           <button
             onClick={() => onTabChange('sell')}
-            className="w-13 h-13 rounded-full bg-linear-to-tr from-[#E5A93B] via-[#F5A623] to-[#FFD166] text-[#1A1A1A] flex items-center justify-center shadow-lg shadow-[#F5A623]/30 hover:scale-105 active:scale-95 transition-all cursor-pointer border-3 border-[#101010]"
+            className="w-13 h-13 rounded-full bg-linear-to-tr from-[#C69A35] via-[#DBAC3E] to-[#E7C875] text-[#172033] flex items-center justify-center shadow-lg shadow-[#C69A35]/30 hover:scale-105 active:scale-95 transition-all cursor-pointer border-3 border-white"
             title="Publier une annonce en 60s"
           >
             <Plus className="w-6 h-6 stroke-[3]" />
           </button>
-          <span className="text-[10px] font-extrabold text-[#F5A623] mt-0.5 tracking-tight">Vendre</span>
+          <span className="text-[10px] font-bold text-[#C69A35] mt-0.5 tracking-tight">Vendre</span>
         </div>
 
         {/* Messages & Offres */}
@@ -60,14 +60,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           onClick={() => onTabChange('messages')}
           className={`relative flex flex-col items-center justify-center min-h-[48px] transition-colors cursor-pointer ${
             activeTab === 'messages'
-              ? 'text-[#F5A623] font-bold'
-              : 'text-gray-400 font-medium hover:text-gray-200'
+              ? 'text-[#C69A35] font-bold'
+              : 'text-[#596273] font-medium hover:text-[#172033]'
           }`}
         >
           <div className="relative">
             <MessageSquare className={`w-5 h-5 ${activeTab === 'messages' ? 'stroke-[2.5]' : 'stroke-2'}`} />
             {unreadMessagesCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-[#DC2626] text-white text-[9px] font-extrabold flex items-center justify-center shadow-sm">
+              <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-extrabold flex items-center justify-center shadow-xs">
                 {unreadMessagesCount}
               </span>
             )}
@@ -80,8 +80,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           onClick={() => onTabChange('profile')}
           className={`flex flex-col items-center justify-center min-h-[48px] transition-colors cursor-pointer ${
             activeTab === 'profile'
-              ? 'text-[#F5A623] font-bold'
-              : 'text-gray-400 font-medium hover:text-gray-200'
+              ? 'text-[#C69A35] font-bold'
+              : 'text-[#596273] font-medium hover:text-[#172033]'
           }`}
         >
           <User className={`w-5 h-5 ${activeTab === 'profile' ? 'stroke-[2.5]' : 'stroke-2'}`} />

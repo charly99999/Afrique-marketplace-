@@ -141,15 +141,17 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   if (!currentUserId) {
     return (
-      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4 text-white">
-        <MessageSquare className="w-12 h-12 text-[#D4AF37] mx-auto opacity-70" />
-        <h3 className="text-base font-bold">Connectez-vous pour accéder à vos messages</h3>
-        <p className="text-xs text-gray-400 max-w-sm mx-auto">
+      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-[#C69A35]">
+          <MessageSquare className="w-8 h-8" />
+        </div>
+        <h3 className="text-base font-extrabold text-[#172033]">Connectez-vous pour accéder à vos messages</h3>
+        <p className="text-xs text-[#596273] max-w-sm mx-auto">
           Discutez directement avec les vendeurs et acheteurs en toute sécurité.
         </p>
         <button
           onClick={onRequireAuth}
-          className="px-6 py-2.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 cursor-pointer shadow-md"
+          className="px-6 py-2.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 cursor-pointer shadow-md transition-all active:scale-95"
         >
           Se connecter / S'inscrire
         </button>
@@ -159,25 +161,25 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   if (loadingConv) {
     return (
-      <div className="py-20 text-center text-xs text-gray-400">
-        Chargement de vos conversations...
+      <div className="py-20 text-center text-xs text-[#596273]">
+        Chargement de vos discussions...
       </div>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4 text-white">
-        <div className="w-16 h-16 rounded-full bg-[#181820] border border-zinc-800 flex items-center justify-center mx-auto text-[#D4AF37]">
+      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-[#C69A35]">
           <MessageSquare className="w-8 h-8" />
         </div>
-        <h3 className="text-base font-bold">Aucune conversation pour le moment</h3>
-        <p className="text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+        <h3 className="text-base font-extrabold text-[#172033]">Aucune discussion pour le moment</h3>
+        <p className="text-xs text-[#596273] max-w-sm mx-auto leading-relaxed">
           Contactez un vendeur directement depuis une annonce pour démarrer une discussion et négocier votre achat.
         </p>
         <button
           onClick={onNavigateExplore}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black hover:brightness-110 cursor-pointer shadow-md shadow-amber-500/20"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 cursor-pointer shadow-md transition-all active:scale-95"
         >
           <Compass className="w-4 h-4" />
           <span>Explorer les annonces</span>
@@ -187,21 +189,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-2 sm:px-4 py-3 pb-24 text-white">
-      <div className="bg-[#121216] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-[78vh]">
+    <div className="max-w-4xl mx-auto px-2 sm:px-4 py-3 pb-24 text-[#172033]">
+      <div className="bg-white border border-[#E5E8EF] rounded-2xl overflow-hidden shadow-sm flex flex-col md:flex-row h-[78vh]">
         {/* Left column: Conversations list */}
         <div
-          className={`w-full md:w-80 border-r border-zinc-800 flex flex-col ${
+          className={`w-full md:w-80 border-r border-[#E5E8EF] flex flex-col bg-white ${
             selectedConvId ? 'hidden md:flex' : 'flex'
           }`}
         >
-          <div className="p-3.5 border-b border-zinc-800 bg-[#16161C]">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-gray-300">
+          <div className="p-3.5 border-b border-[#E5E8EF] bg-[#F8F9FC]">
+            <h2 className="text-xs font-black uppercase tracking-wider text-[#172033]">
               Mes discussions
             </h2>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/60">
+          <div className="flex-1 overflow-y-auto divide-y divide-[#E5E8EF]">
             {conversations.map((conv) => {
               const isSelected = conv.id === selectedConvId;
               const otherName = conv.other_user?.full_name || 'Utilisateur';
@@ -217,27 +219,27 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     onSelectConversation?.(conv.id);
                   }}
                   className={`w-full p-3 flex items-center gap-3 text-left transition-colors cursor-pointer ${
-                    isSelected ? 'bg-[#1C1C24] border-l-2 border-[#D4AF37]' : 'hover:bg-[#16161C]'
+                    isSelected ? 'bg-amber-50/70 border-l-4 border-[#C69A35]' : 'hover:bg-[#F8F9FC]'
                   }`}
                 >
                   {conv.other_user?.avatar_url ? (
                     <img
                       src={conv.other_user.avatar_url}
                       alt=""
-                      className="w-10 h-10 rounded-full object-cover border border-[#D4AF37]/30 bg-zinc-900 shrink-0"
+                      className="w-10 h-10 rounded-full object-cover border-2 border-[#C69A35]/40 bg-[#F1F4F9] shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#D4AF37] to-[#F59E0B] text-black font-extrabold flex items-center justify-center text-xs shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-xs shrink-0 shadow-xs">
                       {initials}
                     </div>
                   )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white truncate flex items-center gap-1">
+                      <h4 className="text-xs font-bold text-[#172033] truncate flex items-center gap-1">
                         <span>{otherName}</span>
                         {conv.other_user?.phone_verified && (
-                          <ShieldCheck className="w-3 h-3 text-[#D4AF37]" />
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#C69A35]" />
                         )}
                       </h4>
                       {conv.unread_count > 0 && (
@@ -247,7 +249,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       )}
                     </div>
 
-                    <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                    <p className="text-[11px] text-[#596273] truncate mt-0.5">
                       {conv.last_message?.content || (conv.listing ? conv.listing.title : 'Nouvelle conversation')}
                     </p>
                   </div>
@@ -259,31 +261,31 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
         {/* Right column: Active Chat Thread */}
         <div
-          className={`flex-1 flex flex-col bg-[#0F0F13] ${
+          className={`flex-1 flex flex-col bg-[#F8F9FC] ${
             !selectedConvId ? 'hidden md:flex items-center justify-center' : 'flex'
           }`}
         >
           {activeConv ? (
             <>
               {/* Chat Header */}
-              <div className="p-3 border-b border-zinc-800 bg-[#14141A] flex items-center justify-between">
+              <div className="p-3 border-b border-[#E5E8EF] bg-white flex items-center justify-between shadow-xs">
                 <div className="flex items-center gap-2.5">
                   <button
                     onClick={() => setSelectedConvId(null)}
-                    className="md:hidden p-1.5 rounded-lg text-gray-400 hover:text-white"
+                    className="md:hidden p-1.5 rounded-lg text-[#596273] hover:text-[#172033]"
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </button>
 
                   <div>
-                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <h3 className="text-xs font-extrabold text-[#172033] flex items-center gap-1.5">
                       <span>{activeConv.other_user?.full_name || 'Utilisateur'}</span>
                       {activeConv.other_user?.phone_verified && (
-                        <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-[#C69A35]" />
                       )}
                     </h3>
                     {activeConv.listing && (
-                      <span className="text-[10px] text-[#D4AF37] truncate block max-w-xs">
+                      <span className="text-[10px] text-[#C69A35] font-bold truncate block max-w-xs">
                         Annonce : {activeConv.listing.title} ({activeConv.listing.price.toLocaleString()} {activeConv.listing.currency})
                       </span>
                     )}
@@ -293,10 +295,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 {contactPhone && (
                   <button
                     onClick={() => (window.location.href = `tel:${contactPhone.replace(/\s+/g, '')}`)}
-                    className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-[#D4AF37] border border-zinc-700 flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                    className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100/80 text-[#A27B20] border border-[#C69A35]/30 flex items-center gap-1 text-xs font-bold cursor-pointer"
                     title="Appeler le vendeur"
                   >
-                    <Phone className="w-3.5 h-3.5" />
+                    <Phone className="w-3.5 h-3.5 text-[#C69A35]" />
                     <span className="hidden sm:inline">Appeler</span>
                   </button>
                 )}
@@ -314,24 +316,24 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       <div
                         className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
                           isMe
-                            ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black font-medium rounded-br-xs shadow-md'
-                            : 'bg-[#1D1D26] text-white rounded-bl-xs border border-zinc-800'
+                            ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] font-semibold rounded-br-xs shadow-xs'
+                            : 'bg-white text-[#172033] rounded-bl-xs border border-[#E5E8EF] shadow-xs'
                         }`}
                       >
                         {msg.image_url && (
-                          <div className="mb-2 rounded-xl overflow-hidden max-h-56 bg-black">
+                          <div className="mb-2 rounded-xl overflow-hidden max-h-56 bg-gray-100 border border-[#E5E8EF]">
                             <img src={msg.image_url} alt="" className="w-full h-full object-cover" />
                           </div>
                         )}
                         <p className="whitespace-pre-line">{msg.content}</p>
                       </div>
 
-                      <span className="text-[9px] text-gray-500 mt-0.5 px-1 flex items-center gap-1">
+                      <span className="text-[9px] text-[#596273] mt-0.5 px-1 flex items-center gap-1">
                         {new Date(msg.created_at).toLocaleTimeString('fr-FR', {
                           hour: '2-digit',
                           minute: '2-digit',
                         })}
-                        {isMe && <CheckCheck className="w-3 h-3 text-[#D4AF37]" />}
+                        {isMe && <CheckCheck className="w-3 h-3 text-[#C69A35]" />}
                       </span>
                     </div>
                   );
@@ -342,16 +344,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               {/* Message Input Box */}
               <form
                 onSubmit={handleSendMessage}
-                className="p-2.5 sm:p-3 border-t border-zinc-800 bg-[#14141A] flex items-center gap-2"
+                className="p-2.5 sm:p-3 border-t border-[#E5E8EF] bg-white flex items-center gap-2"
               >
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingPhoto}
-                  className="p-2 rounded-xl bg-zinc-800 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-[#F8F9FC] text-[#596273] hover:text-[#172033] border border-[#E5E8EF] transition-colors cursor-pointer"
                   title="Envoyer une photo"
                 >
-                  <ImageIcon className="w-4 h-4 text-[#D4AF37]" />
+                  <ImageIcon className="w-4 h-4 text-[#C69A35]" />
                 </button>
                 <input
                   ref={fileInputRef}
@@ -366,20 +368,20 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="Écrivez votre message..."
-                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#1A1A22] text-base sm:text-xs text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base sm:text-xs text-[#172033] placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none"
                 />
 
                 <button
                   type="submit"
                   disabled={isSending || !inputText.trim()}
-                  className="p-2.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black hover:brightness-110 disabled:opacity-40 transition-colors cursor-pointer shadow-md"
+                  className="p-2.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] hover:brightness-105 disabled:opacity-40 transition-all cursor-pointer shadow-xs active:scale-95"
                 >
                   <Send className="w-4 h-4 stroke-[2.5]" />
                 </button>
               </form>
             </>
           ) : (
-            <div className="p-8 text-center text-xs text-gray-400">
+            <div className="p-8 text-center text-xs text-[#596273]">
               Sélectionnez une discussion à gauche pour commencer à échanger.
             </div>
           )}

@@ -1,0 +1,13 @@
+{
+  "reactions": {
+    "test-post-1": [
+      {
+        "userId": "00000000-0000-0000-0000-000000000001",
+        "fullName": "Membre Afrique Business",
+        "reactionType": "love",
+        "createdAt": "2026-11-07T01:28:13.478Z"
+      }
+    ]
+  },
+  "shares": {}
+}

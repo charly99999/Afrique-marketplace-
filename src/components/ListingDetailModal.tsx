@@ -234,13 +234,13 @@ Est-elle toujours disponible ?`;
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
-        <div className="relative w-full max-w-xl max-h-[92vh] sm:rounded-2xl rounded-t-3xl bg-[#121216] border border-zinc-800 overflow-hidden flex flex-col shadow-2xl text-white">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="relative w-full max-w-xl max-h-[92vh] sm:rounded-2xl rounded-t-3xl bg-white border border-[#E5E8EF] overflow-hidden flex flex-col shadow-2xl text-[#172033]">
           {/* Header Bar */}
-          <div className="flex items-center justify-between p-3.5 border-b border-zinc-800 bg-[#121216] z-10">
+          <div className="flex items-center justify-between p-3.5 border-b border-[#E5E8EF] bg-white z-10">
             <div className="flex items-center gap-2 truncate pr-2">
-              <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 truncate">
-                <MapPin className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+              <span className="text-xs font-semibold text-[#596273] flex items-center gap-1.5 truncate">
+                <MapPin className="w-3.5 h-3.5 text-[#C69A35] shrink-0" />
                 <span className="truncate">{listing.city}, {countryConfig.name}</span>
               </span>
             </div>
@@ -250,8 +250,8 @@ Est-elle toujours disponible ?`;
                 onClick={handleToggleFavorite}
                 className={`p-2 rounded-full border transition-colors cursor-pointer ${
                   isFav
-                    ? 'bg-rose-500/20 border-rose-500 text-rose-400'
-                    : 'bg-zinc-800 border-zinc-700 text-gray-400 hover:text-white'
+                    ? 'bg-rose-50 border-rose-300 text-rose-600'
+                    : 'bg-[#F1F4F9] border-[#E5E8EF] text-[#596273] hover:text-[#172033]'
                 }`}
                 title="Ajouter aux favoris"
               >
@@ -260,7 +260,7 @@ Est-elle toujours disponible ?`;
 
               <button
                 onClick={handleShare}
-                className="p-2 rounded-full bg-zinc-800 border border-zinc-700 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                className="p-2 rounded-full bg-[#F1F4F9] border border-[#E5E8EF] text-[#596273] hover:text-[#172033] transition-colors cursor-pointer"
                 title="Partager"
               >
                 <Share2 className="w-4 h-4" />
@@ -268,7 +268,7 @@ Est-elle toujours disponible ?`;
 
               <button
                 onClick={onClose}
-                className="p-2 rounded-full bg-zinc-800 border border-zinc-700 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                className="p-2 rounded-full bg-[#F1F4F9] border border-[#E5E8EF] text-[#596273] hover:text-[#172033] transition-colors cursor-pointer"
                 title="Fermer"
               >
                 <X className="w-4 h-4" />
@@ -278,7 +278,7 @@ Est-elle toujours disponible ?`;
 
           {/* Copy Toast */}
           {copySuccess && (
-            <div className="bg-[#D4AF37] text-black text-xs font-bold py-1.5 text-center">
+            <div className="bg-[#C69A35] text-[#172033] text-xs font-bold py-1.5 text-center">
               Lien copié dans le presse-papier !
             </div>
           )}
@@ -345,27 +345,27 @@ Est-elle toujours disponible ?`;
               {/* Price & Title */}
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-2xl sm:text-3xl font-black text-[#D4AF37] tabular-nums">
+                  <span className="text-2xl sm:text-3xl font-black text-[#C69A35] tabular-nums">
                     {formatted}
                   </span>
                   {indicativeSecondary && (
-                    <span className="text-xs font-semibold text-gray-400 tabular-nums">
+                    <span className="text-xs font-semibold text-[#596273] tabular-nums">
                       ({indicativeSecondary})
                     </span>
                   )}
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold text-white leading-snug">
+                <h2 className="text-lg sm:text-xl font-bold text-[#172033] leading-snug">
                   {listing.title}
                 </h2>
 
                 {/* Category & Subcategory Pills */}
                 <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700 text-xs font-semibold text-gray-200">
-                    <CategoryGoldIcon categoryKey={listing.category as any} className="w-3.5 h-3.5" />
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F1F4F9] border border-[#E5E8EF] text-xs font-semibold text-[#172033]">
+                    <CategoryGoldIcon categoryKey={listing.category as any} className="w-3.5 h-3.5 text-[#C69A35]" />
                     <span>{getCategoryItem(listing.category as any)?.label || listing.category}</span>
                   </div>
                   {listing.subcategory && (
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-xs font-semibold text-[#D4AF37]">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#C69A35]/15 border border-[#C69A35]/30 text-xs font-semibold text-[#172033]">
                       {listing.subcategory}
                     </span>
                   )}
@@ -373,28 +373,28 @@ Est-elle toujours disponible ?`;
                 
                 {/* Edited at notice */}
                 {listing.edited_at && (
-                  <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-[#D4AF37]" />
+                  <p className="text-[11px] text-[#596273] mt-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-[#C69A35]" />
                     <span>Modifiée le {new Date(listing.edited_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                   </p>
                 )}
               </div>
 
               {/* Description */}
-              <div className="p-3.5 rounded-xl bg-[#181820] border border-zinc-800">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+              <div className="p-3.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF]">
+                <h3 className="text-xs font-bold text-[#596273] uppercase tracking-wider mb-2">
                   Description de l'annonce
                 </h3>
-                <p className="text-xs sm:text-sm text-gray-200 leading-relaxed whitespace-pre-line">
+                <p className="text-xs sm:text-sm text-[#172033] leading-relaxed whitespace-pre-line font-normal">
                   {cleanDescription || listing.description}
                 </p>
               </div>
 
-              {/* Facebook Page Attribution Card (Requirement) */}
+              {/* Facebook Page Attribution Card */}
               {fbAttribution && (
-                <div className="p-3.5 rounded-2xl bg-linear-to-r from-[#1877F2]/15 via-[#1877F2]/10 to-transparent border border-[#1877F2]/35 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+                <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-[#1877F2]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-md">
+                    <div className="w-9 h-9 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-xs">
                       <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                         <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                       </svg>
@@ -403,7 +403,7 @@ Est-elle toujours disponible ?`;
                       <span className="text-[10px] text-[#1877F2] font-black uppercase tracking-wider block">
                         Publication Importée
                       </span>
-                      <span className="text-xs font-bold text-white">
+                      <span className="text-xs font-bold text-[#172033]">
                         Publié par {fbAttribution.pageName}
                       </span>
                     </div>
@@ -414,7 +414,7 @@ Est-elle toujours disponible ?`;
                       href={fbAttribution.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shrink-0 cursor-pointer"
+                      className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer"
                     >
                       <span>Voir sur Facebook</span>
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -424,30 +424,30 @@ Est-elle toujours disponible ?`;
               )}
 
               {/* Seller Profile Card */}
-              <div className="p-3.5 rounded-xl bg-[#181820] border border-zinc-800 flex items-center justify-between">
+              <div className="p-3.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {(seller.avatarUrl || seller.avatar_url) ? (
                     <img
                       src={seller.avatarUrl || seller.avatar_url}
                       alt={seller.name}
-                      className="w-12 h-12 rounded-full object-cover border border-[#D4AF37]/40 bg-zinc-900"
+                      className="w-12 h-12 rounded-full object-cover border border-[#E5E8EF] bg-white"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-linear-to-tr from-[#D4AF37] to-[#F59E0B] text-black font-extrabold flex items-center justify-center text-sm shadow-md">
+                    <div className="w-12 h-12 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold flex items-center justify-center text-sm shadow-xs">
                       {sellerInitials}
                     </div>
                   )}
 
                   <div>
-                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <h4 className="text-sm font-bold text-[#172033] flex items-center gap-1.5">
                       <span>{seller.name}</span>
                       {(seller.phone_verified || seller.verified) && (
                         <span title="Numéro vérifié par SMS" className="inline-flex items-center">
-                          <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
+                          <ShieldCheck className="w-4 h-4 text-[#C69A35]" />
                         </span>
                       )}
                     </h4>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-[#596273]">
                       {listing.city || ''}, {countryConfig.name}
                     </p>
                   </div>
@@ -456,7 +456,7 @@ Est-elle toujours disponible ?`;
                 {!isOwner && (
                   <button
                     onClick={() => setShowReportModal(true)}
-                    className="p-1.5 text-xs text-zinc-400 hover:text-red-400 flex items-center gap-1 cursor-pointer"
+                    className="p-1.5 text-xs text-[#596273] hover:text-red-600 flex items-center gap-1 cursor-pointer"
                     title="Signaler cette annonce"
                   >
                     <Flag className="w-3.5 h-3.5" />
@@ -465,27 +465,27 @@ Est-elle toujours disponible ?`;
                 )}
               </div>
 
-              {/* Contact phone section (Requirement A) */}
+              {/* Contact phone section */}
               {(effectiveContactPhone || effectiveWhatsAppPhone) && (
-                <div className="p-3.5 rounded-xl bg-[#1C1C24] border border-[#D4AF37]/30 space-y-2">
-                  <span className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-wider block">
+                <div className="p-3.5 rounded-xl bg-[#F8F9FC] border border-[#C69A35]/30 space-y-2">
+                  <span className="text-[11px] font-bold text-[#C69A35] uppercase tracking-wider block">
                     Coordonnées directes du vendeur
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     {effectiveContactPhone && (
-                      <div className="flex items-center gap-2 text-white bg-black/40 px-3 py-2 rounded-lg border border-zinc-800">
-                        <Phone className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                      <div className="flex items-center gap-2 text-[#172033] bg-white px-3 py-2 rounded-xl border border-[#E5E8EF]">
+                        <Phone className="w-4 h-4 text-[#C69A35] shrink-0" />
                         <div>
-                          <span className="text-[10px] text-gray-400 block">Appels directs</span>
+                          <span className="text-[10px] text-[#596273] block">Appels directs</span>
                           <span className="font-mono font-bold">{effectiveContactPhone}</span>
                         </div>
                       </div>
                     )}
                     {effectiveWhatsAppPhone && (
-                      <div className="flex items-center gap-2 text-white bg-black/40 px-3 py-2 rounded-lg border border-zinc-800">
-                        <span className="text-emerald-400 font-bold shrink-0 text-sm">WhatsApp</span>
+                      <div className="flex items-center gap-2 text-[#172033] bg-white px-3 py-2 rounded-xl border border-[#E5E8EF]">
+                        <span className="text-emerald-600 font-bold shrink-0 text-sm">WhatsApp</span>
                         <div>
-                          <span className="text-[10px] text-gray-400 block">Messagerie WhatsApp</span>
+                          <span className="text-[10px] text-[#596273] block">Messagerie WhatsApp</span>
                           <span className="font-mono font-bold">{effectiveWhatsAppPhone}</span>
                         </div>
                       </div>
@@ -496,8 +496,8 @@ Est-elle toujours disponible ?`;
 
               {/* Owner Controls */}
               {isOwner && (
-                <div className="p-3 rounded-xl bg-[#1A1A24] border border-[#D4AF37]/30 space-y-2">
-                  <span className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-wider block">
+                <div className="p-3 rounded-xl bg-white border border-[#C69A35]/40 space-y-2 shadow-xs">
+                  <span className="text-[11px] font-bold text-[#C69A35] uppercase tracking-wider block">
                     Gestion de votre annonce
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -506,32 +506,32 @@ Est-elle toujours disponible ?`;
                         onEditListing?.(listing);
                         onClose();
                       }}
-                      className="py-2 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2 px-2.5 rounded-lg bg-[#F1F4F9] hover:bg-[#E5E8EF] text-xs font-bold text-[#172033] flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <Edit className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <Edit className="w-3.5 h-3.5 text-[#C69A35]" />
                       <span>Modifier</span>
                     </button>
 
                     <button
                       onClick={() => onStatusChange?.(listing.id, (listing.status === 'sold' || (listing.status as string) === 'SOLD') ? 'active' : 'sold')}
-                      className="py-2 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2 px-2.5 rounded-lg bg-[#F1F4F9] hover:bg-[#E5E8EF] text-xs font-bold text-[#172033] flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                       <span>{(listing.status === 'sold' || (listing.status as string) === 'SOLD') ? 'Remettre en vente' : 'Marquer Vendu'}</span>
                     </button>
 
                     <button
                       onClick={() => onStatusChange?.(listing.id, listing.status === 'paused' ? 'active' : 'paused')}
-                      className="py-2 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2 px-2.5 rounded-lg bg-[#F1F4F9] hover:bg-[#E5E8EF] text-xs font-bold text-[#172033] flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       {listing.status === 'paused' ? (
                         <>
-                          <PlayCircle className="w-3.5 h-3.5 text-[#D4AF37]" />
+                          <PlayCircle className="w-3.5 h-3.5 text-[#C69A35]" />
                           <span>Réactiver</span>
                         </>
                       ) : (
                         <>
-                          <PauseCircle className="w-3.5 h-3.5 text-amber-400" />
+                          <PauseCircle className="w-3.5 h-3.5 text-amber-500" />
                           <span>Mettre en pause</span>
                         </>
                       )}
@@ -544,7 +544,7 @@ Est-elle toujours disponible ?`;
                           onClose();
                         }
                       }}
-                      className="py-2 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800 text-xs font-bold text-red-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2 px-2.5 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-xs font-bold text-red-700 flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Supprimer</span>
@@ -553,21 +553,21 @@ Est-elle toujours disponible ?`;
                 </div>
               )}
 
-              {/* Contacter le service client en cas de problème (Demande de l'utilisateur) */}
-              <div className="p-4 rounded-2xl bg-linear-to-b from-[#1C1C24] to-[#121217] border border-[#D4AF37]/35 space-y-3 shadow-xl">
+              {/* Service Client & Assistance Officielle */}
+              <div className="p-4 rounded-2xl bg-white border border-[#E5E8EF] space-y-3 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <h4 className="text-xs font-bold text-[#172033] uppercase tracking-wider">
                       Service Client & Assistance
                     </h4>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] font-extrabold border border-[#D4AF37]/35">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#C69A35]/15 text-[#C69A35] font-bold border border-[#C69A35]/30">
                     Assistance Directe
                   </span>
                 </div>
 
-                <p className="text-[11px] text-gray-300 leading-snug">
+                <p className="text-[11px] text-[#596273] leading-snug">
                   Un problème avec cette annonce, une question ou besoin d'assistance ? Notre service client officiel est disponible 7j/7 :
                 </p>
 
@@ -576,7 +576,7 @@ Est-elle toujours disponible ?`;
                     href={`https://wa.me/2250565242349?text=${encodeURIComponent(`Bonjour Service Client Afrique Business, j'ai une question concernant l'annonce « ${listing.title} » (ID: ${listing.id})`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                    className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
                   >
                     <span>WhatsApp Service Client</span>
                     <span className="text-[11px] font-mono font-bold">+225 0565242349</span>
@@ -584,9 +584,9 @@ Est-elle toujours disponible ?`;
 
                   <a
                     href={`mailto:marcarnaudkonan2@gmail.com?subject=${encodeURIComponent(`Assistance annonce: ${listing.title} (#${listing.id})`)}`}
-                    className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-gray-200 hover:text-white font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="p-2.5 rounded-xl bg-[#F1F4F9] hover:bg-[#E5E8EF] border border-[#E5E8EF] text-[#172033] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
-                    <Mail className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <Mail className="w-3.5 h-3.5 text-[#C69A35]" />
                     <span className="text-[10px] font-mono truncate">marcarnaudkonan2@gmail.com</span>
                   </a>
                 </div>
@@ -596,34 +596,34 @@ Est-elle toujours disponible ?`;
 
           {/* Action Bar */}
           {!isOwner && (
-            <div className="p-3.5 bg-[#141418] border-t border-zinc-800 flex items-center gap-2 z-10">
-              {/* Phone button: shown only if contact phone exists */}
+            <div className="p-3.5 bg-white border-t border-[#E5E8EF] flex items-center gap-2 z-10 shadow-lg">
+              {/* Phone button */}
               {effectiveContactPhone && (
                 <button
                   onClick={handleCall}
-                  className="flex-1 py-3 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold flex items-center justify-center gap-2 border border-zinc-700 active:scale-98 transition-all cursor-pointer min-h-[44px]"
+                  className="flex-1 py-3 px-3 rounded-xl bg-[#F1F4F9] hover:bg-[#E5E8EF] text-[#172033] text-xs font-bold flex items-center justify-center gap-2 border border-[#E5E8EF] active:scale-98 transition-all cursor-pointer min-h-[44px]"
                   title={`Appeler le ${effectiveContactPhone}`}
                 >
-                  <Phone className="w-4 h-4 text-[#D4AF37]" />
+                  <Phone className="w-4 h-4 text-[#C69A35]" />
                   <span>Appeler</span>
                 </button>
               )}
 
-              {/* WhatsApp button: shown only if whatsapp phone exists */}
+              {/* WhatsApp button */}
               {effectiveWhatsAppPhone && (
                 <button
                   onClick={handleWhatsApp}
-                  className="flex-1 py-3 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer min-h-[44px]"
+                  className="flex-1 py-3 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer min-h-[44px] shadow-xs"
                   title={`Écrire sur WhatsApp au ${effectiveWhatsAppPhone}`}
                 >
                   <span>WhatsApp</span>
                 </button>
               )}
 
-              {/* Message button or disabled notice if chats_enabled is false */}
+              {/* Message button */}
               {seller?.chats_enabled === false ? (
                 <div
-                  className="flex-2 py-2.5 px-3 rounded-xl bg-zinc-900 border border-zinc-800 text-gray-400 text-[11px] font-semibold flex items-center justify-center text-center leading-tight min-h-[44px]"
+                  className="flex-2 py-2.5 px-3 rounded-xl bg-[#F1F4F9] border border-[#E5E8EF] text-[#596273] text-[11px] font-semibold flex items-center justify-center text-center leading-tight min-h-[44px]"
                   title="Le vendeur ne souhaite pas recevoir de messages privés"
                 >
                   Ce vendeur a désactivé les messages
@@ -631,13 +631,14 @@ Est-elle toujours disponible ?`;
               ) : (
                 <button
                   onClick={handleStartConversation}
-                  className="flex-2 py-3 px-3 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-98 transition-all cursor-pointer min-h-[44px]"
+                  className="flex-2 py-3 px-3 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-bold flex items-center justify-center gap-2 shadow-sm hover:brightness-105 active:scale-98 transition-all cursor-pointer min-h-[44px]"
                 >
-                  <MessageSquare className="w-4 h-4 text-black stroke-[2.5]" />
+                  <MessageSquare className="w-4 h-4 text-[#172033] stroke-[2.5]" />
                   <span>Message</span>
                 </button>
               )}
             </div>
+
           )}
         </div>
       </div>
@@ -667,16 +668,16 @@ Est-elle toujours disponible ?`;
 
       {/* Signalement Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-60 bg-black/85 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-[#141418] border border-zinc-800 p-5 text-white shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-red-400">
+        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-2xl bg-white border border-[#E5E8EF] p-5 text-[#172033] shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E8EF]">
+              <h3 className="text-sm font-bold flex items-center gap-2 text-red-600">
                 <Flag className="w-4 h-4" />
                 <span>Signaler cette annonce</span>
               </h3>
               <button
                 onClick={() => setShowReportModal(false)}
-                className="p-1 rounded-full text-gray-400 hover:text-white"
+                className="p-1.5 rounded-full text-[#596273] hover:text-[#172033]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -684,18 +685,18 @@ Est-elle toujours disponible ?`;
 
             {reportSubmitted ? (
               <div className="py-6 text-center space-y-2">
-                <ShieldCheck className="w-10 h-10 text-[#D4AF37] mx-auto" />
-                <p className="text-xs font-bold text-white">Signalement envoyé</p>
-                <p className="text-[11px] text-gray-400">Merci de nous aider à garder Afrique Business sûr.</p>
+                <ShieldCheck className="w-10 h-10 text-[#C69A35] mx-auto" />
+                <p className="text-xs font-bold text-[#172033]">Signalement envoyé</p>
+                <p className="text-[11px] text-[#596273]">Merci de nous aider à garder Afrique Business sûr.</p>
               </div>
             ) : (
               <form onSubmit={handleSubmitReport} className="py-3 space-y-3">
                 <div>
-                  <label className="text-xs font-semibold text-gray-300 block mb-1">Motif</label>
+                  <label className="text-xs font-semibold text-[#172033] block mb-1">Motif</label>
                   <select
                     value={reportReason}
                     onChange={(e) => setReportReason(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#1A1A22] border border-zinc-700 text-xs text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-xs text-[#172033]"
                   >
                     <option value="Annonce frauduleuse ou fausse">Annonce frauduleuse ou fausse</option>
                     <option value="Produit interdit ou illicite">Produit interdit ou illicite</option>
@@ -706,19 +707,19 @@ Est-elle toujours disponible ?`;
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-300 block mb-1">Détails (Optionnel)</label>
+                  <label className="text-xs font-semibold text-[#172033] block mb-1">Détails (Optionnel)</label>
                   <textarea
                     rows={3}
                     value={reportDetails}
                     onChange={(e) => setReportDetails(e.target.value)}
                     placeholder="Précisez votre remarque pour notre équipe..."
-                    className="w-full px-3 py-2 rounded-xl bg-[#1A1A22] border border-zinc-700 text-xs text-white placeholder-gray-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-xs text-[#172033] placeholder-[#596273]"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer transition-colors"
+                  className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs"
                 >
                   Confirmer le signalement
                 </button>

@@ -16,6 +16,14 @@ import {
   testFacebookConnection, 
   startFacebookHourlyScheduler 
 } from './src/server/facebookSync.ts';
+import { 
+  getPostSocialStats, 
+  getPostReactorsList, 
+  setOrToggleReaction, 
+  recordShareEvent, 
+  getBatchStats,
+  type ReactionType 
+} from './src/server/socialReactions.ts';
 import { sanitizeText, isValidPhoneNumber, isValidEmail } from './src/lib/security.ts';
 
 dotenv.config();
@@ -823,10 +831,72 @@ app.post('/api/admin/facebook-notifications/read', async (req, res) => {
 });
 
 // ----------------------------------------------------
+// Social Feed Interactive Reactions & Shares Endpoints
+// ----------------------------------------------------
+app.get('/api/social/stats', (req, res) => {
+  try {
+    const postIdsParam = String(req.query.postIds || '');
+    const currentUserId = req.query.userId ? String(req.query.userId) : undefined;
+    const postIds = postIdsParam.split(',').map((id) => id.trim()).filter(Boolean);
+
+    const stats = getBatchStats(postIds, currentUserId);
+    res.json({ success: true, stats });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/social/reactions/:postId', (req, res) => {
+  try {
+    const { postId } = req.params;
+    const currentUserId = req.query.userId ? String(req.query.userId) : undefined;
+    const stats = getPostSocialStats(postId, currentUserId);
+    const reactors = getPostReactorsList(postId);
+    res.json({ success: true, stats, reactors });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/social/reactions', async (req, res) => {
+  try {
+    const { postId, userId, reactionType, userInfo } = req.body;
+    if (!postId || !userId || !reactionType) {
+      return res.status(400).json({ success: false, message: 'postId, userId et reactionType requis' });
+    }
+
+    const validTypes: ReactionType[] = ['like', 'love', 'haha', 'wow', 'sad', 'angry'];
+    if (!validTypes.includes(reactionType)) {
+      return res.status(400).json({ success: false, message: 'Type de réaction invalide' });
+    }
+
+    const result = await setOrToggleReaction(postId, userId, reactionType, userInfo);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('Error setting reaction:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/social/shares', (req, res) => {
+  try {
+    const { postId, userId, shareType, commentary, createdPostId } = req.body;
+    if (!postId || !userId || !shareType) {
+      return res.status(400).json({ success: false, message: 'postId, userId et shareType requis' });
+    }
+
+    const result = recordShareEvent(postId, userId, shareType, commentary, createdPostId);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ----------------------------------------------------
 // App Version & Deployment Update Detection Endpoint
 // ----------------------------------------------------
 const SERVER_START_TIME = Date.now();
-const APP_VERSION = '2.5.1';
+const APP_VERSION = '3.0.0';
 
 app.get('/api/app-version', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

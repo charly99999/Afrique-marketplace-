@@ -6,7 +6,7 @@ import { CategoryKey } from '../lib/supabaseData';
 import { CATEGORIES_LIST, CategoryGoldIcon } from '../data/categories';
 import { 
   Search, ShieldCheck, Share2, MapPin, Plus, 
-  Package, Grid, Car, Home, Wrench, Briefcase, Tag, Clock, ArrowUpDown, Phone
+  Package, Grid, ArrowUpDown, Phone
 } from 'lucide-react';
 import officialLogoImg from '../assets/images/logo_afrique_business_1792378287169.jpg';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -28,7 +28,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
   currentCountry,
   scopeAllAfrica,
   viewerCurrency,
-  dataSaver,
   searchQuery: externalSearchQuery = '',
   onSelectListing,
   onQuickSell,
@@ -50,7 +49,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
   }, [localSearch]);
 
   const activeSearch = externalSearchQuery.trim() || debouncedLocalSearch.trim();
-
   const countryConfig = AFRICAN_COUNTRIES[currentCountry] || AFRICAN_COUNTRIES.CI;
 
   // Filter listings based on country scope, category, condition, and search
@@ -94,13 +92,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
   };
 
   return (
-    <div className="pb-28 bg-[#09090B] text-[#F8FAFC]">
+    <div className="pb-28 bg-[#F8F9FC] text-[#172033] min-h-screen">
       {/* Prestigious Marketplace Header matching Logo */}
-      <div className="px-3.5 sm:px-6 pt-4 pb-4 bg-linear-to-b from-[#121216] to-[#09090B] border-b border-zinc-800 space-y-4">
+      <div className="px-3.5 sm:px-6 pt-4 pb-4 bg-white border-b border-[#E5E8EF] shadow-xs space-y-4">
         {/* Brand Banner */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3.5">
-            <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-2xl overflow-hidden bg-black border border-[#D4AF37]/50 shrink-0 shadow-lg shadow-amber-500/10">
+            <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-2xl overflow-hidden bg-black border border-[#C69A35]/40 shrink-0 shadow-sm">
               <img
                 src={officialLogoImg}
                 alt="Afrique Business"
@@ -109,16 +107,16 @@ export const FeedView: React.FC<FeedViewProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-none">
-                  Afrique <span className="text-[#D4AF37]">Business</span>
+                <h1 className="text-xl sm:text-2xl font-black text-[#172033] tracking-tight leading-none">
+                  Afrique <span className="text-[#C69A35]">Business</span>
                 </h1>
               </div>
-              <p className="text-xs text-gray-400 mt-1 leading-snug">
+              <p className="text-xs text-[#596273] mt-1 leading-snug">
                 {scopeAllAfrica ? (
                   <span>Toute l'Afrique (Marché continental)</span>
                 ) : (
                   <span>
-                    Marché actif : <span className="text-[#D4AF37] font-semibold">{countryConfig.name}</span>
+                    Marché actif : <span className="text-[#C69A35] font-bold">{countryConfig.name}</span>
                   </span>
                 )}
               </p>
@@ -127,7 +125,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
           <button
             onClick={onOpenScopeModal}
-            className="px-3 py-1.5 rounded-xl bg-[#17171C] border border-zinc-700 hover:border-[#D4AF37]/50 text-xs text-gray-300 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            className="px-3 py-1.5 rounded-xl bg-[#F1F4F9] border border-[#E5E8EF] hover:border-[#C69A35]/50 text-xs text-[#172033] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-xs"
             title="Changer de pays"
           >
             <span className="text-base">{countryConfig.flag}</span>
@@ -138,7 +136,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
         {/* Primary Golden CTA Button */}
         <button
           onClick={onQuickSell}
-          className="w-full py-3.5 px-4 rounded-xl bg-linear-to-r from-[#D4AF37] via-[#F59E0B] to-[#C5A059] hover:brightness-110 active:scale-[0.99] transition-all text-black font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 cursor-pointer min-h-[46px]"
+          className="w-full py-3.5 px-4 rounded-xl bg-linear-to-r from-[#C69A35] via-[#DBAC3E] to-[#E7C875] hover:brightness-105 active:scale-[0.99] transition-all text-[#172033] font-bold text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer min-h-[46px]"
         >
           <Plus className="w-5 h-5 stroke-[3]" />
           <span>+ Déposer une annonce en 60 secondes</span>
@@ -146,33 +144,33 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
         {/* Sleek Search Bar */}
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             placeholder={`Rechercher un article ou un service en ${countryConfig.name}...`}
-            className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#141418] border border-zinc-800 text-base sm:text-xs text-white placeholder-zinc-500 font-medium focus:border-[#D4AF37] focus:outline-none transition-all"
+            className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] text-base sm:text-xs text-[#172033] placeholder-[#596273] font-medium focus:bg-white focus:border-[#C69A35] focus:outline-none transition-all"
           />
           {localSearch && (
             <button
               onClick={() => setLocalSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#596273] hover:text-[#172033]"
             >
               ✕
             </button>
           )}
         </div>
 
-        {/* Categories Bar (15 categories with golden SVG icons) */}
+        {/* Categories Bar */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
           {/* All button */}
           <button
             onClick={() => setSelectedCategory('ALL')}
             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer min-h-[44px] ${
               selectedCategory === 'ALL'
-                ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-md shadow-amber-500/20'
-                : 'bg-[#141418] border border-zinc-800 text-gray-300 hover:border-zinc-700 hover:text-white'
+                ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                : 'bg-[#F8F9FC] border border-[#E5E8EF] text-[#596273] hover:text-[#172033]'
             }`}
           >
             <Grid className="w-3.5 h-3.5" />
@@ -188,13 +186,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer min-h-[44px] ${
                   isSelected
-                    ? 'bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black shadow-md shadow-amber-500/20'
-                    : 'bg-[#141418] border border-zinc-800 text-gray-300 hover:border-zinc-700 hover:text-white'
+                    ? 'bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] shadow-xs'
+                    : 'bg-[#F8F9FC] border border-[#E5E8EF] text-[#596273] hover:text-[#172033]'
                 }`}
               >
                 <CategoryGoldIcon
                   categoryKey={cat.id}
-                  className={`w-4 h-4 ${isSelected ? 'text-black' : 'text-[#D4AF37]'}`}
+                  className={`w-4 h-4 ${isSelected ? 'text-[#172033]' : 'text-[#C69A35]'}`}
                 />
                 <span>{cat.label}</span>
               </button>
@@ -210,8 +208,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
               onClick={() => setConditionFilter('ALL')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                 conditionFilter === 'ALL'
-                  ? 'bg-zinc-800 text-white font-bold'
-                  : 'text-gray-400 hover:text-gray-200'
+                  ? 'bg-[#172033] text-white font-bold'
+                  : 'text-[#596273] hover:text-[#172033]'
               }`}
             >
               Tous états
@@ -220,8 +218,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
               onClick={() => setConditionFilter('neuf')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                 conditionFilter === 'neuf'
-                  ? 'bg-[#D4AF37] text-black font-bold'
-                  : 'text-gray-400 hover:text-gray-200'
+                  ? 'bg-[#C69A35] text-[#172033] font-bold'
+                  : 'text-[#596273] hover:text-[#172033]'
               }`}
             >
               100% Neuf
@@ -230,8 +228,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
               onClick={() => setConditionFilter('occasion')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                 conditionFilter === 'occasion'
-                  ? 'bg-zinc-800 text-white font-bold'
-                  : 'text-gray-400 hover:text-gray-200'
+                  ? 'bg-[#172033] text-white font-bold'
+                  : 'text-[#596273] hover:text-[#172033]'
               }`}
             >
               Occasion
@@ -239,16 +237,16 @@ export const FeedView: React.FC<FeedViewProps> = ({
           </div>
 
           {/* Sort selector */}
-          <div className="flex items-center gap-1 text-gray-400">
-            <ArrowUpDown className="w-3.5 h-3.5 text-[#D4AF37]" />
+          <div className="flex items-center gap-1 text-[#596273]">
+            <ArrowUpDown className="w-3.5 h-3.5 text-[#C69A35]" />
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-gray-300 text-xs focus:outline-none cursor-pointer"
+              className="bg-transparent text-[#172033] font-semibold text-xs focus:outline-none cursor-pointer"
             >
-              <option value="recent" className="bg-[#141418]">Plus récent</option>
-              <option value="price_asc" className="bg-[#141418]">Prix croissant</option>
-              <option value="price_desc" className="bg-[#141418]">Prix décroissant</option>
+              <option value="recent">Plus récent</option>
+              <option value="price_asc">Prix croissant</option>
+              <option value="price_desc">Prix décroissant</option>
             </select>
           </div>
         </div>
@@ -262,14 +260,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
         {filteredListings.length === 0 ? (
           /* Clean Empty State */
           <div className="py-16 text-center space-y-4">
-            <div className="w-16 h-16 rounded-full bg-[#141418] border border-zinc-800 flex items-center justify-center mx-auto text-[#D4AF37]">
+            <div className="w-16 h-16 rounded-full bg-white border border-[#E5E8EF] flex items-center justify-center mx-auto text-[#C69A35] shadow-xs">
               <Package className="w-8 h-8" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-extrabold text-white">
+              <h3 className="text-base font-extrabold text-[#172033]">
                 Aucune annonce pour le moment
               </h3>
-              <p className="text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+              <p className="text-xs text-[#596273] max-w-sm mx-auto leading-relaxed">
                 {activeSearch || selectedCategory !== 'ALL'
                   ? 'Aucun résultat ne correspond à vos filtres. Essayez de réinitialiser votre recherche.'
                   : `Soyez le premier à publier une annonce en ${countryConfig.name} ! C'est rapide, gratuit et sans commission.`}
@@ -278,7 +276,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
             <button
               onClick={onQuickSell}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-linear-to-r from-[#D4AF37] via-[#F59E0B] to-[#C5A059] text-black text-xs font-black shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-98 transition-all cursor-pointer min-h-[44px]"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-bold shadow-sm hover:brightness-105 active:scale-98 transition-all cursor-pointer min-h-[44px]"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Déposer la première annonce</span>
@@ -298,10 +296,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 <div
                   key={listing.id}
                   onClick={() => onSelectListing(listing)}
-                  className="rounded-2xl bg-[#131317] border border-zinc-800/80 hover:border-[#D4AF37]/50 overflow-hidden flex flex-col hover:shadow-xl hover:shadow-amber-500/5 transition-all cursor-pointer group"
+                  className="rounded-2xl bg-white border border-[#E5E8EF] hover:border-[#C69A35]/50 overflow-hidden flex flex-col shadow-xs hover:shadow-md transition-all cursor-pointer group"
                 >
                   {/* Media Thumbnail Container */}
-                  <div className="relative aspect-4/3 w-full bg-zinc-900 overflow-hidden">
+                  <div className="relative aspect-4/3 w-full bg-[#F1F4F9] overflow-hidden">
                     <img
                       src={listing.images[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'}
                       alt={listing.title}
@@ -314,13 +312,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
                     {/* Condition Badge */}
                     <div className="absolute top-2 left-2">
-                      <span className="px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-xs text-[#D4AF37] border border-[#D4AF37]/40 text-[9px] font-bold shadow-md">
+                      <span className="px-2 py-0.5 rounded-full bg-white/95 backdrop-blur-xs text-[#C69A35] border border-[#C69A35]/30 text-[9px] font-bold shadow-xs">
                         {listing.condition === 'neuf' ? '100% Neuf' : 'Occasion'}
                       </span>
                     </div>
 
                     {/* Country Flag Badge */}
-                    <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-xs px-1.5 py-0.5 rounded-md text-xs font-bold border border-zinc-700">
+                    <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-md text-xs font-bold border border-[#E5E8EF] shadow-xs">
                       {AFRICAN_COUNTRIES[listing.country]?.flag || countryConfig.flag}
                     </div>
                   </div>
@@ -330,32 +328,32 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     <div>
                       {/* Price */}
                       <div className="flex items-baseline justify-between mb-1">
-                        <span className="text-base font-black text-[#D4AF37] tracking-tight tabular-nums">
+                        <span className="text-base font-black text-[#C69A35] tracking-tight tabular-nums">
                           {formatted}
                         </span>
                       </div>
 
                       {indicativeSecondary && (
-                        <div className="text-[10px] text-gray-400 font-medium -mt-1 mb-1 tabular-nums">
+                        <div className="text-[10px] text-[#596273] font-medium -mt-1 mb-1 tabular-nums">
                           {indicativeSecondary}
                         </div>
                       )}
 
-                      <h4 className="text-xs font-bold text-white line-clamp-2 leading-snug group-hover:text-[#D4AF37] transition-colors">
+                      <h4 className="text-xs font-bold text-[#172033] line-clamp-2 leading-snug group-hover:text-[#C69A35] transition-colors">
                         {listing.title}
                       </h4>
                     </div>
 
-                    {/* Card Footer: Location & Verified Seller badge if verified */}
-                    <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-[11px] text-gray-400">
+                    {/* Card Footer: Location & Verified Seller badge */}
+                    <div className="pt-2 border-t border-[#E5E8EF] flex items-center justify-between text-[11px] text-[#596273]">
                       <div className="flex items-center gap-1 truncate pr-2">
-                        <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
+                        <MapPin className="w-3 h-3 text-[#596273] shrink-0" />
                         <span className="truncate">{listing.city}</span>
                       </div>
 
                       {listing.seller?.verified && (
-                        <div className="flex items-center gap-1 text-[#D4AF37] shrink-0 font-bold" title="Vendeur avec téléphone vérifié">
-                          <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
+                        <div className="flex items-center gap-1 text-[#C69A35] shrink-0 font-bold" title="Vendeur avec téléphone vérifié">
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#C69A35]" />
                           <span className="text-[10px]">Vérifié</span>
                         </div>
                       )}
@@ -367,27 +365,27 @@ export const FeedView: React.FC<FeedViewProps> = ({
                         <a
                           href={`tel:${String(listing.contact_phone || listing.seller?.phone || '').replace(/[\s\-\(\)]/g, '')}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="flex-1 py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[#D4AF37] hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all border border-[#D4AF37]/30"
+                          className="flex-1 py-1.5 px-2 rounded-lg bg-[#F8F9FC] hover:bg-[#F1F4F9] text-[#C69A35] text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all border border-[#C69A35]/30 shadow-xs"
                           title={`Appeler le ${listing.contact_phone || listing.seller?.phone}`}
                         >
-                          <Phone className="w-3 h-3 text-[#D4AF37]" />
+                          <Phone className="w-3 h-3 text-[#C69A35]" />
                           <span className="truncate">{listing.contact_phone || listing.seller?.phone}</span>
                         </a>
 
                         <button
                           onClick={(e) => handleShareWhatsApp(e, listing)}
-                          className="py-1.5 px-2 rounded-lg bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-700/50 text-emerald-300 text-[11px] font-semibold flex items-center justify-center transition-all cursor-pointer"
+                          className="py-1.5 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-semibold flex items-center justify-center transition-all cursor-pointer shadow-xs"
                           title="Partager sur WhatsApp"
                         >
-                          <Share2 className="w-3 h-3" />
+                          <Share2 className="w-3.5 h-3.5 text-emerald-700" />
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={(e) => handleShareWhatsApp(e, listing)}
-                        className="w-full py-1.5 px-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-gray-300 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        className="w-full py-1.5 px-2 rounded-lg bg-[#F8F9FC] hover:bg-[#F1F4F9] text-[#172033] text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-[#E5E8EF] shadow-xs"
                       >
-                        <Share2 className="w-3 h-3 text-[#D4AF37]" />
+                        <Share2 className="w-3.5 h-3.5 text-[#C69A35]" />
                         <span>Partager l'annonce</span>
                       </button>
                     )}
@@ -397,12 +395,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
             })}
           </div>
 
-          {/* Load More Button (Progressive Pagination) */}
+          {/* Load More Button */}
           {filteredListings.length > visibleCount && (
             <div className="pt-6 text-center">
               <button
                 onClick={() => setVisibleCount((prev) => prev + 20)}
-                className="px-6 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-gray-200 hover:text-white text-xs font-bold border border-zinc-700 transition-colors cursor-pointer min-h-[44px]"
+                className="px-6 py-3 rounded-xl bg-white hover:bg-[#F8F9FC] text-[#172033] text-xs font-bold border border-[#E5E8EF] transition-colors cursor-pointer min-h-[44px] shadow-xs"
               >
                 Afficher plus d'annonces ({filteredListings.length - visibleCount} restantes)
               </button>

@@ -51,25 +51,25 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-lg rounded-2xl bg-[#141418] border border-zinc-800 shadow-2xl text-white flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="w-full max-w-lg rounded-2xl bg-white border border-[#E5E8EF] shadow-2xl text-[#172033] flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+        <div className="p-4 border-b border-[#E5E8EF] flex items-center justify-between bg-[#F8F9FC]">
           <div className="flex items-center gap-2.5">
             {currentStep === 'subcategory' && (
               <button
                 onClick={() => setCurrentStep('category')}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-[#596273] hover:text-[#172033] border border-[#E5E8EF] transition-colors cursor-pointer"
                 title="Retour aux catégories"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
             <div>
-              <h3 className="text-base font-extrabold text-white">
+              <h3 className="text-base font-extrabold text-[#172033]">
                 {currentStep === 'category' ? 'Choisir une catégorie' : 'Préciser la sous-catégorie'}
               </h3>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-[11px] text-[#596273]">
                 {currentStep === 'category'
                   ? 'Sélectionnez la catégorie adaptée à votre annonce'
                   : `Catégorie : ${activeCategoryItem?.label || ''}`}
@@ -82,7 +82,7 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
               onClose();
               setCurrentStep('category');
             }}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
+            className="p-1.5 rounded-lg text-[#596273] hover:text-[#172033] hover:bg-white cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -92,15 +92,15 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
         {currentStep === 'category' && (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Search Input */}
-            <div className="p-3.5 border-b border-zinc-800 bg-[#16161C]">
+            <div className="p-3.5 border-b border-[#E5E8EF] bg-white">
               <div className="relative">
-                <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-[#C69A35] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Rechercher une catégorie..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-700 bg-[#101014] text-xs text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-xs text-[#172033] placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none"
                   autoFocus
                 />
               </div>
@@ -111,8 +111,8 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
               {/* Section: Recommandé */}
               {!searchTerm.trim() && recommendedCategories.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#D4AF37] uppercase tracking-wider">
-                    <Sparkles className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#A27B20] uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5 text-[#C69A35]" />
                     <span>Recommandé</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -124,15 +124,15 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
                           onClick={() => handlePickCategory(cat.id)}
                           className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer group min-h-[96px] ${
                             isSelected
-                              ? 'bg-amber-950/40 border-[#D4AF37] shadow-md shadow-amber-500/10'
-                              : 'bg-[#181820] border-zinc-800 hover:border-[#D4AF37]/50 hover:bg-[#1E1E28]'
+                              ? 'bg-amber-50/80 border-[#C69A35] shadow-xs'
+                              : 'bg-white border-[#E5E8EF] hover:border-[#C69A35]/50 hover:bg-[#F8F9FC]'
                           }`}
                         >
-                          <div className="w-9 h-9 rounded-lg bg-black/60 border border-[#D4AF37]/40 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-                            <CategoryGoldIcon category={cat.id} className="w-5 h-5" />
+                          <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                            <CategoryGoldIcon categoryKey={cat.id} className="w-5 h-5 text-[#C69A35]" />
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-white block group-hover:text-[#D4AF37] transition-colors">
+                            <span className="text-xs font-bold text-[#172033] block group-hover:text-[#C69A35] transition-colors">
                               {cat.label}
                             </span>
                           </div>
@@ -145,11 +145,11 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
 
               {/* Section: Toutes les catégories */}
               <div className="space-y-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-[#596273] uppercase tracking-wider block">
                   {searchTerm.trim() ? 'Résultats de recherche' : 'Toutes les catégories'}
                 </span>
 
-                <div className="divide-y divide-zinc-800/80 rounded-2xl bg-[#181820] border border-zinc-800 overflow-hidden">
+                <div className="divide-y divide-[#E5E8EF] rounded-2xl bg-white border border-[#E5E8EF] overflow-hidden shadow-xs">
                   {(searchTerm.trim() ? filteredCategories : otherCategories).map((cat) => {
                     const isSelected = activeCategory === cat.id;
                     return (
@@ -157,26 +157,26 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
                         key={cat.id}
                         onClick={() => handlePickCategory(cat.id)}
                         className={`w-full p-3.5 flex items-center justify-between transition-colors cursor-pointer text-left ${
-                          isSelected ? 'bg-amber-950/40 text-[#D4AF37]' : 'hover:bg-zinc-800/50 text-white'
+                          isSelected ? 'bg-amber-50/60 text-[#C69A35]' : 'hover:bg-[#F8F9FC] text-[#172033]'
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-black/60 border border-[#D4AF37]/40 flex items-center justify-center shrink-0">
-                            <CategoryGoldIcon category={cat.id} className="w-5 h-5" />
+                          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                            <CategoryGoldIcon categoryKey={cat.id} className="w-5 h-5 text-[#C69A35]" />
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-white block">{cat.label}</span>
-                            <span className="text-[11px] text-gray-400 line-clamp-1">{cat.description}</span>
+                            <span className="text-xs font-bold text-[#172033] block">{cat.label}</span>
+                            <span className="text-[11px] text-[#596273] line-clamp-1">{cat.description}</span>
                           </div>
                         </div>
 
-                        {isSelected && <Check className="w-4 h-4 text-[#D4AF37] shrink-0" />}
+                        {isSelected && <Check className="w-4 h-4 text-[#C69A35] shrink-0" />}
                       </button>
                     );
                   })}
 
                   {filteredCategories.length === 0 && (
-                    <div className="p-8 text-center text-xs text-gray-400">
+                    <div className="p-8 text-center text-xs text-[#596273]">
                       Aucune catégorie trouvée pour « {searchTerm} ».
                     </div>
                   )}
@@ -190,21 +190,21 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
         {currentStep === 'subcategory' && activeCategoryItem && (
           <div className="flex-1 flex flex-col overflow-hidden p-4 space-y-4">
             {/* Active category pill */}
-            <div className="p-3 rounded-xl bg-[#181820] border border-[#D4AF37]/40 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-black/60 border border-[#D4AF37]/50 flex items-center justify-center shrink-0">
-                <CategoryGoldIcon category={activeCategoryItem.id} className="w-5 h-5" />
+            <div className="p-3 rounded-xl bg-amber-50/70 border border-[#C69A35]/30 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-100/80 border border-[#C69A35]/40 flex items-center justify-center shrink-0">
+                <CategoryGoldIcon categoryKey={activeCategoryItem.id} className="w-5 h-5 text-[#C69A35]" />
               </div>
               <div className="flex-1">
-                <span className="text-xs font-extrabold text-[#D4AF37] block">
+                <span className="text-xs font-extrabold text-[#A27B20] block">
                   {activeCategoryItem.label}
                 </span>
-                <span className="text-[11px] text-gray-400 block">{activeCategoryItem.description}</span>
+                <span className="text-[11px] text-[#596273] block">{activeCategoryItem.description}</span>
               </div>
             </div>
 
             {/* Subcategory suggestions chips */}
             <div className="space-y-2 flex-1 overflow-y-auto">
-              <label className="text-xs font-bold text-gray-300 block">
+              <label className="text-xs font-bold text-[#172033] block">
                 Sélectionnez une sous-catégorie fréquente :
               </label>
 
@@ -221,8 +221,8 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
                       }}
                       className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                         isChosen
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-bold shadow-md'
-                          : 'bg-[#181820] hover:bg-zinc-800 text-gray-200 border-zinc-700 hover:border-[#D4AF37]/50'
+                          ? 'bg-[#C69A35] text-white border-[#C69A35] font-bold shadow-xs'
+                          : 'bg-white hover:bg-[#F8F9FC] text-[#172033] border-[#E5E8EF] hover:border-[#C69A35]/50'
                       }`}
                     >
                       {sub}
@@ -232,8 +232,8 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
               </div>
 
               {/* Free text custom subcategory */}
-              <div className="pt-3 border-t border-zinc-800 space-y-2">
-                <label className="text-xs font-bold text-gray-300 block">
+              <div className="pt-3 border-t border-[#E5E8EF] space-y-2">
+                <label className="text-xs font-bold text-[#172033] block">
                   Ou écrivez une sous-catégorie personnalisée :
                 </label>
                 <div className="flex gap-2">
@@ -242,12 +242,12 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
                     value={customSubcategory}
                     onChange={(e) => setCustomSubcategory(e.target.value)}
                     placeholder="Ex: Pièces moteur, Meubles en teck..."
-                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-zinc-700 bg-[#181820] text-xs text-white focus:border-[#D4AF37] focus:outline-none"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-xs text-[#172033] placeholder-gray-400 focus:border-[#C69A35] focus:bg-white focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => handleConfirmSubcategory(customSubcategory)}
-                    className="px-4 py-2.5 rounded-xl bg-linear-to-r from-[#D4AF37] to-[#F59E0B] text-black text-xs font-extrabold hover:brightness-110 cursor-pointer shadow-md"
+                    className="px-4 py-2.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-extrabold hover:brightness-105 cursor-pointer shadow-xs"
                   >
                     Valider
                   </button>
@@ -256,18 +256,18 @@ export const CategorySelectModal: React.FC<CategorySelectModalProps> = ({
             </div>
 
             {/* Quick validate without subcategory */}
-            <div className="pt-2 border-t border-zinc-800 flex justify-between items-center text-xs">
+            <div className="pt-2 border-t border-[#E5E8EF] flex justify-between items-center text-xs">
               <button
                 type="button"
                 onClick={() => setCurrentStep('category')}
-                className="text-gray-400 hover:text-white cursor-pointer"
+                className="text-[#596273] hover:text-[#172033] cursor-pointer"
               >
                 Changer de catégorie
               </button>
               <button
                 type="button"
                 onClick={() => handleConfirmSubcategory('')}
-                className="text-[#D4AF37] hover:underline font-semibold cursor-pointer"
+                className="text-[#C69A35] hover:underline font-bold cursor-pointer"
               >
                 Continuer sans sous-catégorie →
               </button>
