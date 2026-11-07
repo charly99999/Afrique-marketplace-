@@ -1,3 +1,5 @@
+import { safeFetchJson } from './apiClient';
+
 export type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
 export interface ReactionConfig {
@@ -82,10 +84,9 @@ export async function fetchBatchSocialStats(
     const url = `/api/social/stats?postIds=${encodeURIComponent(postIds.join(','))}${
       currentUserId ? `&userId=${encodeURIComponent(currentUserId)}` : ''
     }`;
-    const res = await fetch(url);
-    if (!res.ok) return {};
-    const data = await res.json();
-    return data.stats || {};
+    const res = await safeFetchJson<{ stats: Record<string, PostSocialStats> }>(url);
+    if (!res.ok || !res.data) return {};
+    return res.data.stats || {};
   } catch (err) {
     console.warn('Error fetching batch social stats:', err);
     return {};
@@ -100,12 +101,11 @@ export async function fetchPostReactors(
     const url = `/api/social/reactions/${encodeURIComponent(postId)}${
       currentUserId ? `?userId=${encodeURIComponent(currentUserId)}` : ''
     }`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
+    const res = await safeFetchJson<{ stats: PostSocialStats; reactors: ReactorItem[] }>(url);
+    if (!res.ok || !res.data) return null;
     return {
-      stats: data.stats,
-      reactors: data.reactors || [],
+      stats: res.data.stats,
+      reactors: res.data.reactors || [],
     };
   } catch (err) {
     console.warn('Error fetching post reactors:', err);
@@ -120,7 +120,7 @@ export async function sendPostReaction(
   userInfo?: { fullName?: string; avatarUrl?: string }
 ): Promise<{ action: 'added' | 'removed' | 'updated'; currentReaction: ReactionType | null; stats: PostSocialStats } | null> {
   try {
-    const res = await fetch('/api/social/reactions', {
+    const res = await safeFetchJson<{ action: 'added' | 'removed' | 'updated'; currentReaction: ReactionType | null; stats: PostSocialStats }>('/api/social/reactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -130,8 +130,8 @@ export async function sendPostReaction(
         userInfo,
       }),
     });
-    if (!res.ok) return null;
-    return await res.json();
+    if (!res.ok || !res.data) return null;
+    return res.data;
   } catch (err) {
     console.error('Error sending post reaction:', err);
     return null;
@@ -146,7 +146,7 @@ export async function recordPostShare(
   createdPostId?: string
 ): Promise<{ sharesCount: number } | null> {
   try {
-    const res = await fetch('/api/social/shares', {
+    const res = await safeFetchJson<{ sharesCount: number }>('/api/social/shares', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -157,8 +157,8 @@ export async function recordPostShare(
         createdPostId,
       }),
     });
-    if (!res.ok) return null;
-    return await res.json();
+    if (!res.ok || !res.data) return null;
+    return res.data;
   } catch (err) {
     console.error('Error recording post share:', err);
     return null;

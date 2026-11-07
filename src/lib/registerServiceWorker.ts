@@ -98,7 +98,8 @@ export async function checkForUpdates(): Promise<boolean> {
       },
     });
 
-    if (res.ok) {
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (res.ok && (contentType.includes('application/json') || contentType.includes('+json'))) {
       const data = await res.json();
       if (data?.success && data.buildTimestamp) {
         if (!currentClientBuildTimestamp) {

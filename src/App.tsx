@@ -357,7 +357,9 @@ export default function App() {
         const res = await fetch('/api/admin/facebook-notifications', {
           headers: adminAuthHeaders,
         });
-        const data = await res.json();
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (res.ok && (contentType.includes('application/json') || contentType.includes('+json'))) {
+          const data = await res.json();
         if (data.success && Array.isArray(data.notifications)) {
           const unread = data.notifications.filter((n: any) => !n.read);
           if (unread.length > 0) {
@@ -375,6 +377,7 @@ export default function App() {
               headers: adminAuthHeaders,
             });
           }
+        }
         }
       } catch {
         // Ignore background polling errors

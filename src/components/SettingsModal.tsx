@@ -17,6 +17,8 @@ import {
 import officialLogoImg from '../assets/images/logo_afrique_business_1792378287169.jpg';
 import { PWAInstallButton } from './PWAInstallButton';
 import { checkForUpdates, activateWaitingWorkerAndHardReload } from '../lib/registerServiceWorker';
+import { safeFetchJson } from '../lib/apiClient';
+import { saveClientPassword } from '../lib/clientAuthStore';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -409,8 +411,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setMessage(null);
 
     try {
-      // 1. Update in backend credentials store
-      const res = await fetch('/api/auth/change-password', {
+      // 1. Update in local client credentials store first
+      if (currentUser?.id) {
+        await saveClientPassword(currentUser.id, newPassword, {
+          fullName: currentUser.fullName,
+          phone: currentUser.phone,
+          email: currentUser.email,
+        });
+      }
+
+      // 2. Update in backend credentials store via safeFetchJson
+      await safeFetchJson('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -419,12 +430,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           newPassword,
         }),
       });
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.message || 'Impossible de mettre à jour le mot de passe.');
-      }
 
-      // 2. Also sync with Supabase Auth if session exists
+      // 3. Also sync with Supabase Auth if session exists
       try {
         await supabase.auth.updateUser({ password: newPassword });
       } catch {
