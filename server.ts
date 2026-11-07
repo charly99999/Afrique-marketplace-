@@ -778,7 +778,7 @@ app.post('/api/email/send-transactional', async (req, res) => {
               <li>Explorer les meilleures affaires par catégorie, ville et pays en Afrique</li>
             </ul>
             <div style="margin: 24px 0; text-align: center;">
-              <a href="${process.env.APP_URL || '#'}" style="background: linear-gradient(135deg, #D4AF37, #F59E0B); color: #000000; padding: 12px 24px; border-radius: 12px; font-weight: bold; text-decoration: none; display: inline-block;">Accéder au Marché</a>
+              <a href="${process.env.APP_URL || 'https://afrique-afrique.com'}" style="background: linear-gradient(135deg, #D4AF37, #F59E0B); color: #000000; padding: 12px 24px; border-radius: 12px; font-weight: bold; text-decoration: none; display: inline-block;">Accéder au Marché</a>
             </div>
             <p style="font-size: 11px; color: #71717A; border-top: 1px solid #27272A; padding-top: 16px;">Afrique Business · Plateforme commerciale panafricaine</p>
           </div>

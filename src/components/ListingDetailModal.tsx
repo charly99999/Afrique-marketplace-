@@ -144,7 +144,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   );
 
   // Generate accessible direct deep-link URL for this ad
-  const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-business.app';
+  const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-afrique.com';
   const directAdUrl = `${origin}/#ad-${listing.id}`;
 
   const handleToggleFavorite = async () => {

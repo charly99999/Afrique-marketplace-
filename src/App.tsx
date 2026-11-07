@@ -52,7 +52,7 @@ export default function App() {
     return u && isValidUuid(u.id) ? u : null;
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authDefaultMode, setAuthDefaultMode] = useState<'LOGIN' | 'REGISTER' | 'SMS_OTP'>('LOGIN');
+  const [authDefaultMode, setAuthDefaultMode] = useState<'LOGIN' | 'REGISTER' | 'SMS_OTP' | 'RESET_NEW_PASSWORD'>('LOGIN');
 
   // Modals state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -79,8 +79,15 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Supabase Auth Persistence & Session Restoration
+  // Supabase Auth Persistence & Session Restoration & Password Recovery
   useEffect(() => {
+    // 0. Detect password recovery link from email
+    const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
+    if (hash.includes('type=recovery') || hash.includes('reset-password')) {
+      setAuthDefaultMode('RESET_NEW_PASSWORD');
+      setShowAuthModal(true);
+    }
+
     // 1. Check existing session on boot
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
@@ -116,6 +123,11 @@ export default function App() {
 
     // 2. Realtime Auth State Listener
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthDefaultMode('RESET_NEW_PASSWORD');
+        setShowAuthModal(true);
+      }
+
       if (session?.user) {
         const profile = await getProfile(session.user.id);
         const privPhone = await getAccountPhone(session.user.id);

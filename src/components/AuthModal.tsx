@@ -14,7 +14,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAuthSuccess: (user: StoredUser) => void;
-  defaultMode?: 'LOGIN' | 'REGISTER' | 'SMS_OTP';
+  defaultMode?: 'LOGIN' | 'REGISTER' | 'SMS_OTP' | 'RESET_NEW_PASSWORD';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -23,7 +23,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onAuthSuccess,
   defaultMode = 'LOGIN',
 }) => {
-  const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'SMS_VERIFY' | 'SMS_LOGIN' | 'FORGOT'>('LOGIN');
+  const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'SMS_VERIFY' | 'SMS_LOGIN' | 'FORGOT' | 'RESET_NEW_PASSWORD'>('LOGIN');
   const [smsSource, setSmsSource] = useState<'register' | 'login'>('login');
 
   // Register type: Phone or Email
@@ -68,6 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   useEffect(() => {
     if (defaultMode === 'REGISTER') setMode('REGISTER');
     else if (defaultMode === 'SMS_OTP') setMode('SMS_LOGIN');
+    else if (defaultMode === 'RESET_NEW_PASSWORD') setMode('RESET_NEW_PASSWORD');
     else setMode('LOGIN');
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -486,15 +487,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       setIsLoading(true);
+      const appOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-afrique.com';
+      const redirectUrl = `${appOrigin}/#reset-password`;
+
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim().toLowerCase(), {
-        redirectTo: window.location.origin,
+        redirectTo: redirectUrl,
       });
       setIsLoading(false);
 
       if (error) {
-        setErrorMsg(`Impossible d’envoyer le lien : ${error.message}`);
+        if (error.message.includes('rate limit')) {
+          setErrorMsg("Limite d'envoi d'e-mails atteinte temporairement. Si votre compte est associé à votre numéro de téléphone, utilisez l'onglet « Par SMS » pour réinitialiser immédiatement votre mot de passe sans attente.");
+        } else {
+          setErrorMsg(`Impossible d’envoyer le lien : ${error.message}. Vous pouvez également utiliser la réinitialisation par SMS.`);
+        }
       } else {
-        setSuccessMsg('Un lien de réinitialisation a été envoyé à votre adresse e-mail.');
+        setSuccessMsg(`Un lien sécurisé de réinitialisation a été envoyé à ${forgotEmail}. Ouvrez ce lien sur votre téléphone ou ordinateur pour définir votre nouveau mot de passe.`);
       }
     }
   };
@@ -573,6 +581,90 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  // 7. Define New Password from Email Recovery Link (Full loop closure)
+  const handleUpdatePasswordFromRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    if (!newPassword || newPassword.length < 6) {
+      setErrorMsg('Le nouveau mot de passe doit comporter au moins 6 caractères.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setErrorMsg('Les deux mots de passe ne correspondent pas.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // 1. Update password in Supabase Auth using the authenticated recovery session
+      const { data: updateData, error: updateErr } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateErr) {
+        throw updateErr;
+      }
+
+      const sessionUser = updateData.user;
+      if (sessionUser) {
+        // 2. Sync to server credentials store
+        try {
+          await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: sessionUser.id,
+              newPassword,
+            }),
+          });
+        } catch (syncErr) {
+          console.warn('Backend sync warning on recovery:', syncErr);
+        }
+
+        const profile = await getProfile(sessionUser.id);
+        const privPhone = await getAccountPhone(sessionUser.id);
+        const fullName = profile?.full_name || sessionUser.user_metadata?.full_name || 'Utilisateur';
+        const nameParts = fullName.split(' ');
+
+        const loggedUser: StoredUser = {
+          id: sessionUser.id,
+          firstName: nameParts[0] || 'Utilisateur',
+          lastName: nameParts.slice(1).join(' ') || '',
+          fullName,
+          email: sessionUser.email && !sessionUser.email.includes('@afrique-business.') ? sessionUser.email : undefined,
+          phone: privPhone || sessionUser.phone,
+          country: (profile?.country as CountryCode) || 'CI',
+          city: profile?.city || 'Abidjan',
+          avatarUrl: profile?.avatar_url,
+          phone_verified: Boolean(profile?.phone_verified),
+          activeRole: 'BUYER',
+          kycLevel: 1,
+          trustScore: 5.0,
+          walletBalance: 0,
+          registeredAt: new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+        };
+
+        setCurrentUser(loggedUser);
+        onAuthSuccess(loggedUser);
+      }
+
+      if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      setSuccessMsg('Votre nouveau mot de passe a été enregistré avec succès ! Vous êtes connecté.');
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      console.error('Password recovery update error:', err);
+      setErrorMsg(err.message || 'Erreur lors de la mise à jour du mot de passe.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="w-full max-w-md rounded-2xl bg-white border border-[#E5E8EF] p-5 sm:p-6 shadow-2xl text-[#172033] max-h-[92vh] overflow-y-auto">
@@ -589,6 +681,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {mode === 'SMS_VERIFY' && 'Vérification par code SMS'}
                 {mode === 'SMS_LOGIN' && 'Connexion rapide par SMS'}
                 {mode === 'FORGOT' && 'Mot de passe oublié'}
+                {mode === 'RESET_NEW_PASSWORD' && 'Définir un nouveau mot de passe'}
               </h3>
               <p className="text-[10px] text-[#596273]">Marché panafricain 100% sécurisé</p>
             </div>
@@ -1132,6 +1225,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               Retour à la connexion
             </button>
           </div>
+        )}
+
+        {/* ---------------- MODE: RESET NEW PASSWORD (FROM EMAIL RECOVERY LINK) ---------------- */}
+        {mode === 'RESET_NEW_PASSWORD' && (
+          <form onSubmit={handleUpdatePasswordFromRecovery} className="py-4 space-y-3.5">
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-[#C69A35]/30 text-xs">
+              <span className="font-bold text-[#172033] block mb-0.5">Lien de réinitialisation vérifié</span>
+              <span className="text-[#596273]">Saisissez votre nouveau mot de passe pour mettre à jour vos accès en toute sécurité.</span>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-[#172033] block mb-1">
+                Nouveau mot de passe *
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="6 caractères minimum"
+                  required
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-[#172033] block mb-1">
+                Confirmer le nouveau mot de passe *
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-[#596273] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  placeholder="Répétez le nouveau mot de passe"
+                  required
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E5E8EF] bg-[#F8F9FC] text-base text-[#172033] focus:border-[#C69A35] focus:bg-white focus:outline-none text-sm placeholder-gray-400"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
+            >
+              {isLoading ? 'Enregistrement...' : 'Enregistrer mon nouveau mot de passe'}
+            </button>
+          </form>
         )}
       </div>
     </div>

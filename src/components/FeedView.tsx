@@ -84,7 +84,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   const handleShareWhatsApp = (e: React.MouseEvent, listing: Listing) => {
     e.stopPropagation();
-    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-business.app';
+    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://afrique-afrique.com';
     const directAdUrl = `${origin}/#ad-${listing.id}`;
     const safePrice = Number(listing.price) || 0;
     const text = `🛍️ *${listing.title}*\n💰 Prix : *${safePrice.toLocaleString()} ${listing.currency || 'FCFA'}*\n📍 Lieu : ${listing.city || ''}\n👉 Voir l'annonce sur *Afrique Business* :\n${directAdUrl}`;

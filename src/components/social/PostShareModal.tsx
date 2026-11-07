@@ -32,7 +32,7 @@ export const PostShareModal: React.FC<PostShareModalProps> = ({
 
   if (!isOpen) return null;
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://afrique-business.app';
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://afrique-afrique.com';
   const postShareUrl = `${originUrl}/#post-${post.id}`;
   const authorName = post.author?.full_name || 'Membre Afrique Business';
   const authorInitials = authorName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
