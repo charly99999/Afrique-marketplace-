@@ -149,22 +149,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         // Synchronize Supabase Auth session to ensure Storage RLS permissions
         const candEmailsA = generateCandidateEmails(cleanIdent);
+        let hasSessionA = false;
         for (const em of candEmailsA) {
           try {
             const { data: sData } = await supabase.auth.signInWithPassword({
               email: em,
               password: loginPassword,
             });
-            if (sData?.session) break;
+            if (sData?.session) { hasSessionA = true; break; }
           } catch {
             // ignore
           }
         }
 
-        setCurrentUser(loggedUser);
-        onAuthSuccess(loggedUser);
-        onClose();
-        return;
+        // Une connexion n'est valide que si Supabase a ouvert une vraie session
+        // (sinon l'envoi de photos et l'écriture en base échouent).
+        if (hasSessionA) {
+          setCurrentUser(loggedUser);
+          onAuthSuccess(loggedUser);
+          onClose();
+          return;
+        }
       }
 
       // Step B: Verify against client-side credentials store
@@ -172,22 +177,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (clientAuth.success && clientAuth.user) {
         // Synchronize Supabase Auth session to ensure Storage RLS permissions
         const candEmailsB = generateCandidateEmails(cleanIdent);
+        let hasSessionB = false;
         for (const em of candEmailsB) {
           try {
             const { data: sData } = await supabase.auth.signInWithPassword({
               email: em,
               password: loginPassword,
             });
-            if (sData?.session) break;
+            if (sData?.session) { hasSessionB = true; break; }
           } catch {
             // ignore
           }
         }
 
-        setCurrentUser(clientAuth.user);
-        onAuthSuccess(clientAuth.user);
-        onClose();
-        return;
+        if (hasSessionB) {
+          setCurrentUser(clientAuth.user);
+          onAuthSuccess(clientAuth.user);
+          onClose();
+          return;
+        }
       }
 
       // Step C: Resolve account candidate emails and try Supabase Auth
@@ -297,22 +305,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         // Synchronize Supabase Auth session to ensure Storage RLS permissions
         const candEmailsD = generateCandidateEmails(cleanIdent);
+        let hasSessionD = false;
         for (const em of candEmailsD) {
           try {
             const { data: sData } = await supabase.auth.signInWithPassword({
               email: em,
               password: loginPassword,
             });
-            if (sData?.session) break;
+            if (sData?.session) { hasSessionD = true; break; }
           } catch {
             // ignore
           }
         }
 
-        setCurrentUser(adminUser);
-        onAuthSuccess(adminUser);
-        onClose();
-        return;
+        // Sécurité : plus aucune connexion sans mot de passe valide côté serveur.
+        if (hasSessionD) {
+          setCurrentUser(adminUser);
+          onAuthSuccess(adminUser);
+          onClose();
+          return;
+        }
       }
 
       setErrorMsg("Mot de passe incorrect ou compte introuvable. Vous pouvez vous connecter rapidement par code SMS ou réinitialiser votre mot de passe ci-dessous.");

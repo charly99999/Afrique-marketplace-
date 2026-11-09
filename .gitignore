@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Données sensibles : ne jamais publier
+data/user_credentials.json
