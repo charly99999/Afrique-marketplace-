@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { CountryCode, Listing } from '../types';
 import { AFRICAN_COUNTRIES, CITIES_BY_COUNTRY } from '../data/countries';
 import { uploadWebpImage, ListingCondition, isValidUuid, getAccountPhone } from '../lib/supabaseData';
+import { supabase } from '../lib/supabase';
 import { CategoryKey, getCategoryItem, CategoryGoldIcon } from '../data/categories';
 import { CategorySelectModal } from './CategorySelectModal';
 import { 
@@ -162,6 +163,23 @@ export const PublishView: React.FC<PublishViewProps> = ({
       return;
     }
 
+    // Verify that Supabase Auth session is active to guarantee RLS permissions
+    let { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session?.user) {
+      try {
+        const { data: refData } = await supabase.auth.refreshSession();
+        sessionData = { session: refData?.session || null };
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!sessionData?.session?.user) {
+      setErrorMessage("Votre session sécurisée a expiré. Veuillez vous reconnecter pour autoriser l'envoi de vos photos.");
+      onRequireAuth();
+      return;
+    }
+
     const availableSlots = 8 - photos.length;
     if (availableSlots <= 0) {
       setErrorMessage('Vous avez atteint le maximum de 8 photos par annonce.');
@@ -173,7 +191,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
     setCompressionMsg('Compression WebP en cours (haute résolution, optimisée pour connexions mobiles)...');
 
     const uploadedUrls: string[] = [];
-    const userId = currentUser.id;
+    const userId = sessionData.session.user.id || currentUser.id;
 
     for (const file of files) {
       try {

@@ -319,6 +319,8 @@ export function generateCandidateEmails(identifier: string): string[] {
 
   if (cleanDigits) {
     candidates.push(`user_${cleanDigits}@afrique-business.ci`);
+    candidates.push(`auth_${cleanDigits}@afrique-business.internal`);
+    candidates.push(`auth_${cleanDigits}@afrique-business.app`);
     candidates.push(`phone_${cleanDigits}@afrique-business.com`);
     candidates.push(`+${cleanDigits}@afrique-business.com`);
     candidates.push(`${cleanDigits}@afrique-business.com`);

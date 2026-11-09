@@ -339,13 +339,27 @@ export function isValidUuid(id?: string | null): boolean {
 }
 
 export async function resolveValidAuthUid(candidateId?: string | null): Promise<string> {
-  if (candidateId && isValidUuid(candidateId)) {
-    return candidateId;
+  // 1. First check if an authenticated Supabase session is active or can be refreshed
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    try {
+      const { data: refreshData } = await supabase.auth.refreshSession();
+      session = refreshData?.session || null;
+    } catch {
+      // ignore refresh failure
+    }
   }
-  const { data: { session } } = await supabase.auth.getSession();
+
+  // 2. Prioritize authenticated Supabase user ID to strictly satisfy RLS policies
   if (session?.user?.id && isValidUuid(session.user.id)) {
     return session.user.id;
   }
+
+  // 3. Fallback to candidate ID from local user session
+  if (candidateId && isValidUuid(candidateId)) {
+    return candidateId;
+  }
+
   throw new Error('Vous devez être connecté avec un compte vérifié pour effectuer cette action.');
 }
 
@@ -363,7 +377,29 @@ export async function uploadWebpImage(
     throw new Error('Image trop volumineuse. Taille maximale autorisée : 5 Mo.');
   }
 
-  const validUid = await resolveValidAuthUid(userId);
+  // 1. Verify and obtain active session
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    try {
+      const { data: refreshData } = await supabase.auth.refreshSession();
+      session = refreshData?.session || null;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Resolve owner UUID: prefer active session UID so folder path strictly matches auth.uid() in RLS
+  const validUid = (session?.user?.id && isValidUuid(session.user.id))
+    ? session.user.id
+    : await resolveValidAuthUid(userId);
+
+  // If no Supabase authenticated session is present, warn user explicitly
+  if (!session?.user) {
+    throw new Error(
+      "Votre session de connexion Supabase a expiré ou n'est pas active. Veuillez vous reconnecter pour autoriser le téléversement des photos."
+    );
+  }
+
   const { blob } = await compressImageToWebP(file, 1600, 1600, 0.85);
   const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
 
@@ -381,7 +417,13 @@ export async function uploadWebpImage(
 
   if (error || !data) {
     console.error('Storage upload error:', error);
-    throw new Error(`Échec du téléversement de l'image (${bucket}) : ${error?.message || 'Erreur inconnue'}`);
+    const msg = error?.message || '';
+    if (msg.includes('row-level security') || msg.includes('violates')) {
+      throw new Error(
+        `Échec du téléversement (${bucket}) : les règles de sécurité Supabase RLS bloquent l'envoi. Assurez-vous d'avoir exécuté la migration SQL de configuration du bucket '${bucket}'.`
+      );
+    }
+    throw new Error(`Échec du téléversement de l'image (${bucket}) : ${msg || 'Erreur inconnue'}`);
   }
 
   if (bucket === 'chat') {

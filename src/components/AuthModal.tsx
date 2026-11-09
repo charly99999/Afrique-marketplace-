@@ -147,6 +147,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           avatarUrl: u.avatarUrl,
         });
 
+        // Synchronize Supabase Auth session to ensure Storage RLS permissions
+        const candEmailsA = generateCandidateEmails(cleanIdent);
+        for (const em of candEmailsA) {
+          try {
+            const { data: sData } = await supabase.auth.signInWithPassword({
+              email: em,
+              password: loginPassword,
+            });
+            if (sData?.session) break;
+          } catch {
+            // ignore
+          }
+        }
+
         setCurrentUser(loggedUser);
         onAuthSuccess(loggedUser);
         onClose();
@@ -156,6 +170,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       // Step B: Verify against client-side credentials store
       const clientAuth = await verifyClientLogin(cleanIdent, loginPassword);
       if (clientAuth.success && clientAuth.user) {
+        // Synchronize Supabase Auth session to ensure Storage RLS permissions
+        const candEmailsB = generateCandidateEmails(cleanIdent);
+        for (const em of candEmailsB) {
+          try {
+            const { data: sData } = await supabase.auth.signInWithPassword({
+              email: em,
+              password: loginPassword,
+            });
+            if (sData?.session) break;
+          } catch {
+            // ignore
+          }
+        }
+
         setCurrentUser(clientAuth.user);
         onAuthSuccess(clientAuth.user);
         onClose();
@@ -266,6 +294,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           walletBalance: 0,
           registeredAt: new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
         };
+
+        // Synchronize Supabase Auth session to ensure Storage RLS permissions
+        const candEmailsD = generateCandidateEmails(cleanIdent);
+        for (const em of candEmailsD) {
+          try {
+            const { data: sData } = await supabase.auth.signInWithPassword({
+              email: em,
+              password: loginPassword,
+            });
+            if (sData?.session) break;
+          } catch {
+            // ignore
+          }
+        }
 
         setCurrentUser(adminUser);
         onAuthSuccess(adminUser);
@@ -703,6 +745,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         await supabase.auth.updateUser({ password: newPassword });
       } catch {
         // Ignored
+      }
+
+      // Synchronize Supabase Auth session with the new password
+      const resetCandidates = generateCandidateEmails(forgotPhone);
+      for (const em of resetCandidates) {
+        try {
+          const { data: sData } = await supabase.auth.signInWithPassword({
+            email: em,
+            password: newPassword,
+          });
+          if (sData?.session) break;
+        } catch {
+          // ignore
+        }
       }
 
       setSuccessMsg('Votre mot de passe a été modifié avec succès ! Connexion en cours...');

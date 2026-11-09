@@ -18,7 +18,7 @@ import { PWAUpdateToast } from './components/PWAUpdateToast';
 import { Listing, CountryCode, StoredUser, AppNotification } from './types';
 import { 
   getCurrentUser, setCurrentUser, getStoredNotifications, 
-  addNotification, markNotificationsAsRead, isValidUuid
+  addNotification, markNotificationsAsRead, isValidUuid, getStoredListings
 } from './lib/storage';
 import { supabase } from './lib/supabase';
 import { 
@@ -266,8 +266,10 @@ export default function App() {
         if (!targetId) return;
 
         // 1. Check if already in current loaded listings
-        const existing = listings.find((l) => l.id === targetId);
+        const existing = listings.find((l) => l.id === targetId) || getStoredListings().find((l: Listing) => l.id === targetId);
         if (existing) {
+          setShowCommunityView(false);
+          setActiveTab('feed');
           setSelectedListing(existing);
           return;
         }
@@ -320,6 +322,8 @@ export default function App() {
           },
         };
 
+        setShowCommunityView(false);
+        setActiveTab('feed');
         setSelectedListing(directListing);
       } catch (err) {
         console.warn('Erreur résolution lien direct:', err);
@@ -335,59 +339,6 @@ export default function App() {
       window.removeEventListener('popstate', handleUrlListing);
     };
   }, [listings]);
-
-  // Check for Admin Facebook alerts (token expiration, rate limit, etc.)
-  useEffect(() => {
-    if (!currentUser) return;
-    const isAdmin =
-      currentUser.email === 'marcarnaudkonan2@gmail.com' ||
-      currentUser.fullName?.toLowerCase().includes('marc') ||
-      currentUser.phone?.includes('2250565242349') ||
-      currentUser.id === 'd2882463-6bcf-414a-8844-6c06279e50e0';
-
-    if (!isAdmin) return;
-
-    const checkAdminAlerts = async () => {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const adminAuthHeaders: Record<string, string> = {};
-        if (sessionData?.session?.access_token) {
-          adminAuthHeaders['Authorization'] = `Bearer ${sessionData.session.access_token}`;
-        }
-        const res = await fetch('/api/admin/facebook-notifications', {
-          headers: adminAuthHeaders,
-        });
-        const contentType = (res.headers.get('content-type') || '').toLowerCase();
-        if (res.ok && (contentType.includes('application/json') || contentType.includes('+json'))) {
-          const data = await res.json();
-        if (data.success && Array.isArray(data.notifications)) {
-          const unread = data.notifications.filter((n: any) => !n.read);
-          if (unread.length > 0) {
-            unread.forEach((n: any) => {
-              addNotification({
-                title: n.title,
-                message: n.message,
-                type: 'SYSTEM',
-              });
-            });
-            setNotifications(getStoredNotifications());
-            // Mark read on server so not spammed
-            await fetch('/api/admin/facebook-notifications/read', {
-              method: 'POST',
-              headers: adminAuthHeaders,
-            });
-          }
-        }
-        }
-      } catch {
-        // Ignore background polling errors
-      }
-    };
-
-    checkAdminAlerts();
-    const interval = setInterval(checkAdminAlerts, 60 * 1000);
-    return () => clearInterval(interval);
-  }, [currentUser]);
 
   // Viewer Currency
   const viewerCurrency = AFRICAN_COUNTRIES[currentCountry]?.currency || 'XOF';
