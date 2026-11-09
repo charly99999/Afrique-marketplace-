@@ -175,8 +175,10 @@ export const PublishView: React.FC<PublishViewProps> = ({
     }
 
     if (!sessionData?.session?.user) {
-      setErrorMessage("Votre session sécurisée a expiré. Veuillez vous reconnecter pour autoriser l'envoi de vos photos.");
-      onRequireAuth();
+      // Ne pas rouvrir la fenêtre d'inscription : l'utilisateur est déjà connecté localement,
+      // mais le serveur n'a pas accepté son mot de passe (session Supabase absente).
+      e.target.value = '';
+      setErrorMessage("Votre compte est affiché comme connecté, mais le serveur n'a pas ouvert de session sécurisée (mot de passe non synchronisé). Déconnectez-vous, puis reconnectez-vous avec votre mot de passe, ou utilisez « Mot de passe oublié » pour le réinitialiser.");
       return;
     }
 
