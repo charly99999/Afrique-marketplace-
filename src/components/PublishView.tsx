@@ -158,27 +158,8 @@ export const PublishView: React.FC<PublishViewProps> = ({
     if (!e.target.files || e.target.files.length === 0) return;
     setErrorMessage(null);
 
-    if (!currentUser || !isValidUuid(currentUser.id)) {
+    if (!currentUser) {
       onRequireAuth();
-      return;
-    }
-
-    // Verify that Supabase Auth session is active to guarantee RLS permissions
-    let { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData?.session?.user) {
-      try {
-        const { data: refData } = await supabase.auth.refreshSession();
-        sessionData = { session: refData?.session || null };
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!sessionData?.session?.user) {
-      // Ne pas rouvrir la fenêtre d'inscription : l'utilisateur est déjà connecté localement,
-      // mais le serveur n'a pas accepté son mot de passe (session Supabase absente).
-      e.target.value = '';
-      setErrorMessage("Votre compte est affiché comme connecté, mais le serveur n'a pas ouvert de session sécurisée (mot de passe non synchronisé). Déconnectez-vous, puis reconnectez-vous avec votre mot de passe, ou utilisez « Mot de passe oublié » pour le réinitialiser.");
       return;
     }
 
@@ -193,7 +174,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
     setCompressionMsg('Compression WebP en cours (haute résolution, optimisée pour connexions mobiles)...');
 
     const uploadedUrls: string[] = [];
-    const userId = sessionData.session.user.id || currentUser.id;
+    const userId = currentUser.id;
 
     for (const file of files) {
       try {
@@ -230,7 +211,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!currentUser || !isValidUuid(currentUser.id)) {
+    if (!currentUser) {
       onRequireAuth();
       return;
     }

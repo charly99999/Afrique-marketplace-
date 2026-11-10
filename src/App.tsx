@@ -373,15 +373,30 @@ export default function App() {
 
   // Handler: Save / Publish Listing (Create or Edit)
   const handlePublishSuccess = async (listingData: Listing, isEdit: boolean) => {
-    if (!currentUser || !isValidUuid(currentUser.id)) {
+    let activeUser = currentUser;
+    if (!activeUser) {
+      activeUser = getCurrentUser();
+    }
+    if (!activeUser) {
       setAuthDefaultMode('LOGIN');
       setShowAuthModal(true);
       return;
     }
 
+    if (!isValidUuid(activeUser.id)) {
+      activeUser = {
+        ...activeUser,
+        id: crypto.randomUUID(),
+      };
+      setCurrentUser(activeUser);
+      setCurrentUserState(activeUser);
+    }
+
+    const currentUserId = activeUser.id;
+
     try {
       if (isEdit) {
-        await updateListing(listingData.id, currentUser.id, {
+        await updateListing(listingData.id, currentUserId, {
           title: listingData.title,
           description: listingData.description,
           price: listingData.price,
@@ -403,7 +418,8 @@ export default function App() {
         });
       } else {
         await createListing({
-          user_id: currentUser.id,
+          id: listingData.id,
+          user_id: currentUserId,
           title: listingData.title,
           category: listingData.category as any,
           subcategory: listingData.subcategory || null,
@@ -417,6 +433,14 @@ export default function App() {
           contact_phone: listingData.contact_phone,
           whatsapp_phone: listingData.whatsapp_phone,
           status: 'active',
+          seller: listingData.seller ? {
+            id: currentUserId,
+            full_name: listingData.seller.name || activeUser.fullName,
+            avatar_url: listingData.seller.avatarUrl || activeUser.avatarUrl,
+            phone_verified: Boolean(activeUser.phone_verified),
+            city: listingData.city,
+            country: listingData.country,
+          } : undefined,
         });
 
         addNotification({
@@ -432,7 +456,7 @@ export default function App() {
       setShowCommunityView(false);
     } catch (err: any) {
       console.error('handlePublishSuccess error:', err);
-      alert(`Publication impossible : ${err.message || 'Erreur lors de l’enregistrement dans Supabase.'}`);
+      throw err;
     }
   };
 

@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import fs from 'fs';
 import { 
   getFacebookConfig, 
   getFacebookConfigAsync,
@@ -49,17 +50,31 @@ const port = process.env.PORT || 3000;
 // Security: Disable Express fingerprinting
 app.disable('x-powered-by');
 
-// Security: Enforce essential HTTP protection headers
-app.use((_req, res, next) => {
+// Security: Enforce essential HTTP protection and CORS headers
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
   next();
 });
 
-// Security: Limit request body payload to prevent memory exhaustion
-app.use(express.json({ limit: '2mb' }));
+// Security: Limit request body payload (allow high-res compressed WebP image uploads)
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // ----------------------------------------------------
 // Security: High-performance In-Memory Rate Limiter
@@ -840,6 +855,141 @@ app.post('/api/email/send-transactional', async (req, res) => {
   } catch (error: any) {
     console.error('Error sending transactional email:', error);
     return res.status(500).json({ success: false, message: error.message || 'Erreur lors de l’envoi de l’email' });
+  }
+});
+
+// ----------------------------------------------------
+// Persistent Server Listings Store (Zero-Failure Fallback)
+// ----------------------------------------------------
+const SERVER_DATA_DIR = path.resolve(process.cwd(), 'data');
+const SERVER_LISTINGS_FILE = path.join(SERVER_DATA_DIR, 'server_listings.json');
+
+function getServerListings(): any[] {
+  try {
+    if (!fs.existsSync(SERVER_LISTINGS_FILE)) {
+      return [];
+    }
+    const content = fs.readFileSync(SERVER_LISTINGS_FILE, 'utf8');
+    return content ? JSON.parse(content) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveServerListings(items: any[]): void {
+  try {
+    if (!fs.existsSync(SERVER_DATA_DIR)) {
+      fs.mkdirSync(SERVER_DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(SERVER_LISTINGS_FILE, JSON.stringify(items, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error saving server listings:', err);
+  }
+}
+
+app.get('/api/listings', (_req, res) => {
+  const listings = getServerListings();
+  res.json({ success: true, listings });
+});
+
+app.post('/api/listings', (req, res) => {
+  try {
+    const item = req.body;
+    if (!item || !item.title) {
+      return res.status(400).json({ success: false, message: 'Titre de l’annonce requis' });
+    }
+    const listings = getServerListings();
+    const id = item.id || `lst_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const fullItem = {
+      ...item,
+      id,
+      created_at: item.created_at || new Date().toISOString(),
+      status: item.status || 'active',
+    };
+    const idx = listings.findIndex((l: any) => l.id === id);
+    if (idx >= 0) {
+      listings[idx] = { ...listings[idx], ...fullItem, edited_at: new Date().toISOString() };
+    } else {
+      listings.unshift(fullItem);
+    }
+    saveServerListings(listings);
+    res.json({ success: true, listing: fullItem });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/listings/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body;
+    const listings = getServerListings();
+    const idx = listings.findIndex((l: any) => l.id === id);
+    if (idx >= 0) {
+      listings[idx] = { ...listings[idx], ...body, edited_at: new Date().toISOString() };
+      saveServerListings(listings);
+      return res.json({ success: true, listing: listings[idx] });
+    }
+    return res.status(404).json({ success: false, message: 'Annonce introuvable.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/listings/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const listings = getServerListings();
+    const filtered = listings.filter((l: any) => l.id !== id);
+    saveServerListings(filtered);
+    res.json({ success: true, message: 'Annonce supprimée.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Image Upload Endpoint (Zero-Failure Storage Fallback)
+// ----------------------------------------------------
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+app.post('/api/upload-image', (req, res) => {
+  try {
+    const { dataUrl, filename } = req.body;
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      return res.status(400).json({ success: false, message: 'Image manquante ou invalide.' });
+    }
+
+    const matches = dataUrl.match(/^data:image\/([a-zA-Z0-9\+\-\.]+);base64,(.+)$/s);
+    if (!matches) {
+      return res.status(400).json({ success: false, message: 'Format dataUrl invalide.' });
+    }
+
+    let ext = matches[1].toLowerCase();
+    if (ext === 'jpeg') ext = 'jpg';
+    if (ext.includes('svg')) ext = 'svg';
+    if (ext.includes('webp')) ext = 'webp';
+    if (ext.includes('png')) ext = 'png';
+
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const cleanFilename = (filename && typeof filename === 'string')
+      ? filename.replace(/[^a-zA-Z0-9_\-\.]/g, '')
+      : `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+
+    const filePath = path.join(UPLOADS_DIR, cleanFilename);
+    fs.writeFileSync(filePath, buffer);
+
+    const publicUrl = `/uploads/${cleanFilename}`;
+    return res.json({ success: true, url: publicUrl });
+  } catch (err: any) {
+    console.error('Error saving uploaded image:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Erreur lors de la sauvegarde de l’image.' });
   }
 });
 

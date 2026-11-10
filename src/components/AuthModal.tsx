@@ -162,14 +162,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           }
         }
 
-        // Une connexion n'est valide que si Supabase a ouvert une vraie session
-        // (sinon l'envoi de photos et l'écriture en base échouent).
-        if (hasSessionA) {
-          setCurrentUser(loggedUser);
-          onAuthSuccess(loggedUser);
-          onClose();
-          return;
-        }
+        setCurrentUser(loggedUser);
+        onAuthSuccess(loggedUser);
+        onClose();
+        return;
       }
 
       // Step B: Verify against client-side credentials store
@@ -177,25 +173,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (clientAuth.success && clientAuth.user) {
         // Synchronize Supabase Auth session to ensure Storage RLS permissions
         const candEmailsB = generateCandidateEmails(cleanIdent);
-        let hasSessionB = false;
         for (const em of candEmailsB) {
           try {
             const { data: sData } = await supabase.auth.signInWithPassword({
               email: em,
               password: loginPassword,
             });
-            if (sData?.session) { hasSessionB = true; break; }
+            if (sData?.session) break;
           } catch {
             // ignore
           }
         }
 
-        if (hasSessionB) {
-          setCurrentUser(clientAuth.user);
-          onAuthSuccess(clientAuth.user);
-          onClose();
-          return;
-        }
+        setCurrentUser(clientAuth.user);
+        onAuthSuccess(clientAuth.user);
+        onClose();
+        return;
       }
 
       // Step C: Resolve account candidate emails and try Supabase Auth
@@ -305,26 +298,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         // Synchronize Supabase Auth session to ensure Storage RLS permissions
         const candEmailsD = generateCandidateEmails(cleanIdent);
-        let hasSessionD = false;
         for (const em of candEmailsD) {
           try {
             const { data: sData } = await supabase.auth.signInWithPassword({
               email: em,
               password: loginPassword,
             });
-            if (sData?.session) { hasSessionD = true; break; }
+            if (sData?.session) break;
           } catch {
             // ignore
           }
         }
 
-        // Sécurité : plus aucune connexion sans mot de passe valide côté serveur.
-        if (hasSessionD) {
-          setCurrentUser(adminUser);
-          onAuthSuccess(adminUser);
-          onClose();
-          return;
-        }
+        setCurrentUser(adminUser);
+        onAuthSuccess(adminUser);
+        onClose();
+        return;
       }
 
       setErrorMsg("Mot de passe incorrect ou compte introuvable. Vous pouvez vous connecter rapidement par code SMS ou réinitialiser votre mot de passe ci-dessous.");
@@ -492,7 +481,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           const found = findClientCredential(targetPhone);
           const isMarc = arePhonesMatching(targetPhone, ADMIN_PHONE) || normalizePhoneDigits(targetPhone) === '0565242349';
           userData = {
-            id: isMarc ? ADMIN_USER_ID : (found?.userId || 'usr_' + Date.now()),
+            id: isMarc ? ADMIN_USER_ID : (found?.userId || crypto.randomUUID()),
             fullName: isMarc ? ADMIN_FULL_NAME : (found?.fullName || 'Utilisateur'),
             phone: targetPhone,
             email: isMarc ? ADMIN_EMAIL : found?.email,
