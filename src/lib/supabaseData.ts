@@ -461,41 +461,11 @@ export async function uploadWebpImage(
     console.warn(`Direct storage upload attempt caught error for ${bucket}:`, storageErr?.message);
   }
 
-  // 4. Convert compressed WebP blob to Base64 Data URL
-  let dataUrl: string;
-  try {
-    dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result);
-        } else {
-          reject(new Error("Échec de la conversion de l'image."));
-        }
-      };
-      reader.onerror = () => reject(new Error("Erreur lors de la lecture de l'image."));
-      reader.readAsDataURL(blob);
-    });
-  } catch (fallbackErr: any) {
-    throw new Error(`Échec du traitement de l'image : ${fallbackErr?.message || 'Erreur inconnue'}`);
-  }
-
-  // 5. Attempt upload to local Express server store (/api/upload-image)
-  try {
-    const uploadRes = await safeFetchJson<{ success: boolean; url?: string }>('/api/upload-image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataUrl, filename: uniqueName, bucket }),
-    });
-    if (uploadRes.ok && uploadRes.data?.success && uploadRes.data.url) {
-      return uploadRes.data.url;
-    }
-  } catch (serverUploadErr) {
-    console.warn('Server upload-image note:', serverUploadErr);
-  }
-
-  // 6. Final guarantee: return verified safe dataUrl
-  return dataUrl;
+  // Pas de faux succès : si Supabase Storage refuse l'envoi, on le dit clairement.
+  // (Ni image stockée en base64 dans la base, ni copie sur le disque du serveur, qui est temporaire sur Vercel.)
+  throw new Error(
+    "Échec du téléversement de la photo : session expirée ou accès refusé par le stockage. Déconnectez-vous, reconnectez-vous puis réessayez."
+  );
 }
 
 // ----------------------------------------------------
