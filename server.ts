@@ -120,6 +120,7 @@ function getClientIp(req: express.Request): string {
 
 // In-memory OTP storage for SMS verification with brute-force defense
 interface OtpRecord {
+  simulated?: boolean; // code affiché au client faute de SMS réel : ne doit jamais servir à se connecter ou changer un mot de passe
   code: string;
   expiresAt: number;
   attempts: number;
@@ -226,6 +227,7 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
       if (!twilioRes.ok) {
         const twilioErr = await twilioRes.text();
         console.warn('[Twilio Error] Fallback to simulated delivery:', twilioErr);
+        otpStore.set(cleanPhone, { code, expiresAt, attempts: 0, lastRequestedAt: now, simulated: true });
         return res.json({
           success: true,
           simulated: true,
@@ -243,6 +245,7 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
 
     // Fallback: Simulator mode with clear display for dev/testing
     console.log(`[SMS Gateway Simulator] OTP verification code generated for ${cleanPhone}.`);
+    otpStore.set(cleanPhone, { code, expiresAt, attempts: 0, lastRequestedAt: now, simulated: true });
     return res.json({
       success: true,
       simulated: true,
@@ -413,6 +416,13 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
 
     if (!entry) {
       return res.status(400).json({ success: false, message: 'Aucun code SMS actif pour ce numéro ou code expiré.' });
+    }
+
+    if (entry.simulated) {
+      return res.status(503).json({
+        success: false,
+        message: "Le service SMS n'est pas encore activé : connectez-vous avec votre mot de passe.",
+      });
     }
 
     if (Date.now() > entry.expiresAt) {
@@ -592,6 +602,13 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
 
     if (!entry) {
       return res.status(400).json({ success: false, message: 'Aucun code SMS actif pour ce numéro ou code expiré.' });
+    }
+
+    if (entry.simulated) {
+      return res.status(503).json({
+        success: false,
+        message: "Le service SMS n'est pas encore activé : connectez-vous avec votre mot de passe.",
+      });
     }
 
     if (Date.now() > entry.expiresAt) {
