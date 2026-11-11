@@ -509,6 +509,7 @@ export async function fetchListings(filters?: {
   offset?: number;
 }): Promise<ListingData[]> {
   const listingsMap = new Map<string, ListingData>();
+  let supabaseOk = false;
 
   // 1. Fetch from Supabase cloud database
   try {
@@ -556,6 +557,7 @@ export async function fetchListings(filters?: {
 
     const { data, error } = await query;
     if (!error && Array.isArray(data)) {
+      supabaseOk = true;
       for (const item of data) {
         if (item.id) {
           (item as any).images = normalizeImages(item.images);
@@ -567,8 +569,8 @@ export async function fetchListings(filters?: {
     console.warn('Supabase fetchListings note:', err?.message);
   }
 
-  // 2. Fetch from Express Server Store (/api/listings)
-  try {
+  // 2. Fetch from Express Server Store (/api/listings) — uniquement si Supabase est injoignable
+  if (!supabaseOk) try {
     const serverRes = await safeFetchJson<{ success: boolean; listings: ListingData[] }>('/api/listings');
     if (serverRes.ok && serverRes.data?.success && Array.isArray(serverRes.data.listings)) {
       for (const item of serverRes.data.listings) {
@@ -582,8 +584,8 @@ export async function fetchListings(filters?: {
     console.warn('Server fetchListings note:', serverErr?.message);
   }
 
-  // 3. Fallback to LocalStorage stored listings
-  try {
+  // 3. Fallback to LocalStorage stored listings — uniquement si Supabase est injoignable
+  if (!supabaseOk) try {
     const stored = getStoredListings();
     for (const item of stored) {
       if (item.id && !listingsMap.has(item.id)) {
@@ -728,10 +730,16 @@ export async function createListing(listing: {
     if (!error && data) {
       createdItem = data as ListingData;
     } else {
-      console.warn('Supabase DB insert note:', error?.message);
+      console.error('Supabase DB insert error:', error);
+      throw new Error(
+        `L'annonce n'a pas été enregistrée : ${error?.message || 'erreur inconnue'}. ` +
+        `Si le message parle de sécurité (row-level security), déconnectez-vous puis reconnectez-vous avec votre mot de passe.`
+      );
     }
   } catch (err: any) {
-    console.warn('Supabase DB insert caught note:', err?.message);
+    if (err?.message?.startsWith("L'annonce n'a pas été enregistrée")) throw err;
+    console.error('Supabase DB insert caught error:', err);
+    throw new Error(`L'annonce n'a pas été enregistrée : ${err?.message || 'connexion impossible'}.`);
   }
 
   const generatedId = createdItem?.id || listing.id || `lst_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -858,11 +866,15 @@ export async function updateListing(
       `)
       .single();
 
-    if (!error && data) {
-      updatedItem = data as ListingData;
+    if (error || !data) {
+      console.error('Supabase updateListing error:', error);
+      throw new Error(`La modification n'a pas été enregistrée : ${error?.message || 'annonce introuvable ou accès refusé'}.`);
     }
-  } catch (err) {
-    console.warn('Supabase updateListing note:', err);
+    updatedItem = data as ListingData;
+  } catch (err: any) {
+    if (err?.message?.startsWith("La modification n'a pas été enregistrée")) throw err;
+    console.error('Supabase updateListing caught error:', err);
+    throw new Error(`La modification n'a pas été enregistrée : ${err?.message || 'connexion impossible'}.`);
   }
 
   const finalListing: ListingData = updatedItem || {
