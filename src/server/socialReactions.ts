@@ -28,7 +28,8 @@ interface SocialDataStore {
   shares: Record<string, ShareRecord[]>; // postId -> shares
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'social_interactions.json');
 
 // Supabase client for DB synchronization

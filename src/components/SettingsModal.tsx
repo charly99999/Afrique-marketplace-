@@ -19,6 +19,8 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { checkForUpdates, activateWaitingWorkerAndHardReload } from '../lib/registerServiceWorker';
 import { safeFetchJson } from '../lib/apiClient';
 import { saveClientPassword } from '../lib/clientAuthStore';
+import { appToast } from '../lib/feedback';
+import { SafeAvatar } from './SafeImage';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -144,10 +146,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setUpdateCheckMsg('Nouvelle version trouvée ! Redémarrage...');
         await activateWaitingWorkerAndHardReload();
       } else {
-        setUpdateCheckMsg('Votre application est parfaitement à jour (v2.5.1)');
+        setUpdateCheckMsg('Votre application est parfaitement à jour (v3.0.0)');
       }
     } catch {
-      setUpdateCheckMsg('Vérification effectuée. Version actuelle : v2.5.1');
+      setUpdateCheckMsg('Vérification effectuée. Version actuelle : v3.0.0');
     } finally {
       setCheckingUpdate(false);
     }
@@ -411,19 +413,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setMessage(null);
 
     try {
-      // 1. Update in local client credentials store first
-      if (currentUser?.id) {
-        await saveClientPassword(currentUser.id, newPassword, {
-          fullName: currentUser.fullName,
-          phone: currentUser.phone,
-          email: currentUser.email,
-        });
+      // 1. Verify old password & update via authenticated backend endpoint when session active
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Session expirée. Veuillez vous reconnecter pour modifier votre mot de passe.');
       }
 
-      // 2. Update in backend credentials store via safeFetchJson
-      await safeFetchJson('/api/auth/change-password', {
+      const apiRes = await safeFetchJson<{ success: boolean; message?: string }>('/api/auth/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           userId: currentUser?.id,
           oldPassword,
@@ -431,11 +432,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }),
       });
 
-      // 3. Also sync with Supabase Auth if session exists
-      try {
-        await supabase.auth.updateUser({ password: newPassword });
-      } catch {
-        // Ignored if local session
+      if (!apiRes.ok || !apiRes.data?.success) {
+        throw new Error(apiRes.data?.message || apiRes.error || 'Ancien mot de passe incorrect.');
+      }
+
+      // 2. Sync with Supabase Auth
+      const { error: supaErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (supaErr) {
+        throw supaErr;
+      }
+
+      // 3. Update local client credentials store after server + Supabase confirmation
+      if (currentUser?.id) {
+        await saveClientPassword(currentUser.id, newPassword, {
+          fullName: currentUser.fullName,
+          phone: currentUser.phone,
+          email: currentUser.email,
+        });
       }
 
       setMessage({ type: 'success', text: 'Mot de passe modifié avec succès !' });
@@ -465,7 +478,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       await rpcDeleteMyAccount();
       onLogout();
       onClose();
-      alert('Votre compte et vos données ont été définitivement supprimés.');
+      appToast('Votre compte et vos données ont été définitivement supprimés.', 'info');
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Erreur lors de la suppression du compte.' });
       setIsDeletingAccount(false);
@@ -547,17 +560,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {currentUser ? (
                 <div className="p-3.5 rounded-2xl bg-[#F8F9FC] border border-[#E5E8EF] flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {currentUser.avatarUrl ? (
-                      <img
-                        src={currentUser.avatarUrl}
-                        alt=""
-                        className="w-12 h-12 rounded-full object-cover border-2 border-[#C69A35]/50 bg-white"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-sm shadow-xs">
-                        {currentUser.fullName.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
+                    <SafeAvatar
+                      src={currentUser.avatarUrl}
+                      alt={currentUser.fullName}
+                      initials={currentUser.fullName.slice(0, 2).toUpperCase()}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-[#C69A35]/50 bg-white"
+                      fallbackClassName="w-12 h-12 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-sm shadow-xs"
+                    />
                     <div>
                       <h4 className="text-xs font-bold text-[#172033] flex items-center gap-1.5">
                         <span>{currentUser.fullName}</span>
@@ -972,17 +981,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Avatar Upload (Bucket 'avatars', WebP) */}
               <div className="p-4 rounded-2xl bg-[#181820] border border-zinc-800 text-center">
                 <div className="relative w-24 h-24 mx-auto mb-3">
-                  {currentUser.avatarUrl ? (
-                    <img
-                      src={currentUser.avatarUrl}
-                      alt={currentUser.fullName}
-                      className="w-full h-full rounded-full object-cover border-2 border-[#D4AF37] bg-black shadow-lg"
-                    />
-                  ) : (
-                    <div className="w-full h-full rounded-full bg-linear-to-tr from-[#D4AF37] to-[#F59E0B] text-black font-black text-2xl flex items-center justify-center border-2 border-[#D4AF37]">
-                      {currentUser.fullName.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+                  <SafeAvatar
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.fullName}
+                    initials={currentUser.fullName.slice(0, 2).toUpperCase()}
+                    className="w-full h-full rounded-full object-cover border-2 border-[#D4AF37] bg-black shadow-lg"
+                    fallbackClassName="w-full h-full rounded-full bg-linear-to-tr from-[#D4AF37] to-[#F59E0B] text-black font-black text-2xl flex items-center justify-center border-2 border-[#D4AF37]"
+                  />
 
                   <label className="absolute bottom-0 right-0 p-2 rounded-full bg-[#D4AF37] text-black cursor-pointer hover:bg-amber-400 shadow-md min-h-[36px] min-w-[36px] flex items-center justify-center">
                     <Camera className="w-4 h-4" />
@@ -1486,7 +1491,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-extrabold text-white">Afrique Business</h4>
-                  <span className="text-[11px] text-[#D4AF37] font-semibold">Version 2.5.0 (PWA Production)</span>
+                  <span className="text-[11px] text-[#D4AF37] font-semibold">Version 3.0.0 (PWA Production)</span>
                 </div>
               </div>
 

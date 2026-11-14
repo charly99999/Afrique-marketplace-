@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Listing, CountryCode } from '../types';
 import { AFRICAN_COUNTRIES } from '../data/countries';
-import { fetchListings, getFavoriteListingIds, updateListing, deleteListing } from '../lib/supabaseData';
+import { fetchListings, fetchListingsByIds, getFavoriteListingIds, updateListing, deleteListing, deleteOwnStoragePhoto } from '../lib/supabaseData';
 import { 
   ShieldCheck, MapPin, Settings, Plus, Edit, 
   Trash2, CheckCircle2, PauseCircle, PlayCircle, Heart,
-  Package, Store, Phone, Mail
+  Package, Store, Phone, Mail, AlertTriangle, RefreshCw
 } from 'lucide-react';
+import { appConfirm, appToast } from '../lib/feedback';
+import { SafeImage, SafeAvatar } from './SafeImage';
 
 interface ProfileViewProps {
   currentUser: {
@@ -42,6 +44,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [activeTab, setActiveTab] = useState<'listings' | 'favorites'>('listings');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'sold' | 'paused'>('all');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadProfileData = async () => {
     if (!currentUser) {
@@ -49,21 +52,26 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       return;
     }
     setLoading(true);
+    setLoadError(null);
 
-    // Fetch user's listings
-    const myAds = await fetchListings({ userId: currentUser.id });
-    setUserListings(myAds as any);
+    try {
+      // Fetch user's listings
+      const myAds = await fetchListings({ userId: currentUser.id });
+      setUserListings(myAds as any);
 
-    // Fetch favorites
-    const favIds = await getFavoriteListingIds(currentUser.id);
-    if (favIds.length > 0) {
-      const allActive = await fetchListings({});
-      setFavoriteListings(allActive.filter((l) => favIds.includes(l.id)) as any);
-    } else {
-      setFavoriteListings([]);
+      // Fetch favorites without arbitrary 200-listing truncation
+      const favIds = await getFavoriteListingIds(currentUser.id);
+      if (favIds.length > 0) {
+        const favAds = await fetchListingsByIds(favIds);
+        setFavoriteListings(favAds as any);
+      } else {
+        setFavoriteListings([]);
+      }
+    } catch (err: any) {
+      setLoadError(err?.message || 'Impossible de charger vos annonces.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -72,17 +80,46 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const handleStatusChange = async (listingId: string, newStatus: 'active' | 'sold' | 'paused') => {
     if (!currentUser) return;
-    await updateListing(listingId, currentUser.id, { status: newStatus });
-    setUserListings((prev) =>
-      prev.map((l) => (l.id === listingId ? { ...l, status: newStatus } : l))
-    );
+    try {
+      await updateListing(listingId, currentUser.id, { status: newStatus });
+      setUserListings((prev) =>
+        prev.map((l) => (l.id === listingId ? { ...l, status: newStatus } : l))
+      );
+      appToast(
+        newStatus === 'sold'
+          ? 'Annonce marquée comme vendue.'
+          : newStatus === 'paused'
+          ? 'Annonce mise en pause.'
+          : 'Annonce réactivée.',
+        'success'
+      );
+    } catch (err: any) {
+      appToast(`Mise à jour impossible : ${err?.message || 'Erreur réseau'}`, 'error');
+    }
   };
 
   const handleDeleteListing = async (listingId: string) => {
     if (!currentUser) return;
-    if (confirm('Voulez-vous vraiment supprimer définitivement cette annonce ?')) {
+    const confirmed = await appConfirm({
+      title: 'Supprimer cette annonce',
+      message: 'Voulez-vous vraiment supprimer définitivement cette annonce ? Cette action est irréversible.',
+      confirmText: 'Supprimer',
+      cancelText: 'Annuler',
+      danger: true,
+    });
+    if (!confirmed) return;
+    const targetListing = userListings.find((l) => l.id === listingId);
+    try {
       await deleteListing(listingId, currentUser.id);
+      if (targetListing?.images && targetListing.images.length > 0) {
+        Promise.all(
+          targetListing.images.map((url) => deleteOwnStoragePhoto('listings', currentUser.id, url))
+        ).catch(() => {});
+      }
       setUserListings((prev) => prev.filter((l) => l.id !== listingId));
+      appToast('Annonce supprimée définitivement.', 'success');
+    } catch (err: any) {
+      appToast(`Suppression impossible : ${err?.message || 'Erreur réseau'}`, 'error');
     }
   };
 
@@ -133,17 +170,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E5E8EF] shadow-sm">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3.5">
-            {currentUser.avatarUrl ? (
-              <img
-                src={currentUser.avatarUrl}
-                alt={currentUser.fullName}
-                className="w-16 h-16 rounded-full object-cover border-2 border-[#C69A35] shadow-sm bg-[#F1F4F9]"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-lg shadow-sm border-2 border-white">
-                {initials}
-              </div>
-            )}
+            <SafeAvatar
+              src={currentUser.avatarUrl}
+              alt={currentUser.fullName}
+              initials={initials}
+              className="w-16 h-16 rounded-full object-cover border-2 border-[#C69A35] shadow-sm bg-[#F1F4F9]"
+              fallbackClassName="w-16 h-16 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-lg shadow-sm border-2 border-white"
+            />
 
             <div>
               <h2 className="text-base font-extrabold text-[#172033] flex items-center gap-1.5">
@@ -289,6 +322,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </button>
           </div>
 
+          {loadError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span className="font-semibold">{loadError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={loadProfileData}
+                className="px-3 py-1 rounded-lg bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 cursor-pointer flex items-center gap-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Réessayer</span>
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div className="py-8 text-center text-xs text-[#596273]">Chargement de vos annonces...</div>
           ) : filteredListings.length === 0 ? (
@@ -321,7 +371,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
                   >
                     <div className="w-16 h-16 rounded-xl overflow-hidden bg-[#F1F4F9] shrink-0 border border-[#E5E8EF]">
-                      <img
+                      <SafeImage
                         src={listing.images[0]}
                         alt={listing.title}
                         className="w-full h-full object-cover"
@@ -436,7 +486,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   className="p-3 rounded-2xl bg-white border border-[#E5E8EF] shadow-xs flex items-center gap-3 cursor-pointer hover:border-[#C69A35] transition-colors"
                 >
                   <div className="w-16 h-16 rounded-xl overflow-hidden bg-[#F1F4F9] shrink-0 border border-[#E5E8EF]">
-                    <img src={fav.images?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'} alt="" className="w-full h-full object-cover" />
+                    <SafeImage src={fav.images?.[0]} alt={fav.title} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-xs font-black text-[#C69A35] block tabular-nums">

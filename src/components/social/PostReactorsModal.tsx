@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ReactorItem, ReactionType, REACTION_CONFIGS, ORDERED_REACTIONS } from '../../lib/socialApi';
 import { X, Users } from 'lucide-react';
+import { SafeAvatar } from '../SafeImage';
 
 interface PostReactorsModalProps {
   isOpen: boolean;
@@ -112,17 +113,13 @@ export const PostReactorsModal: React.FC<PostReactorsModalProps> = ({
                 <div key={i} className="pt-2 first:pt-0 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      {reactor.avatarUrl ? (
-                        <img
-                          src={reactor.avatarUrl}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF]"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold text-xs flex items-center justify-center">
-                          {initials}
-                        </div>
-                      )}
+                      <SafeAvatar
+                        src={reactor.avatarUrl}
+                        alt={reactor.fullName || 'Membre'}
+                        initials={initials}
+                        className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF]"
+                        fallbackClassName="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold text-xs flex items-center justify-center"
+                      />
                       {/* Emoji Badge on Avatar */}
                       <span className="absolute -bottom-1 -right-1 text-sm bg-white rounded-full p-0.5 shadow-xs border border-[#E5E8EF] leading-none">
                         {item.emoji}

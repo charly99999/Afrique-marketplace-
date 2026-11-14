@@ -1,6 +1,8 @@
+import { validateImageFileSignature } from './security';
+
 /**
  * Client-Side Image Compressor for Mobile / 3G Pan-African environments
- * Converts camera photos into optimized WebP under 1600px max dimension.
+ * Validates binary magic bytes first, then converts camera photos into optimized WebP under 1600px max dimension.
  */
 export async function compressImageToWebP(
   file: File | Blob,
@@ -8,11 +10,12 @@ export async function compressImageToWebP(
   maxHeight = 1600,
   quality = 0.8
 ): Promise<{ blob: Blob; dataUrl: string; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      return reject(new Error("Le fichier sélectionné n'est pas une image valide."));
-    }
+  const sig = await validateImageFileSignature(file);
+  if (!sig.valid) {
+    throw new Error(sig.reason || "Le fichier sélectionné n'est pas une image valide.");
+  }
 
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {

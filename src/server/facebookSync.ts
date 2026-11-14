@@ -6,10 +6,15 @@ import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../../data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.resolve(__dirname, '../../data');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('[FacebookSync] Notice on DATA_DIR creation:', e);
 }
 
 const CONFIG_FILE = path.join(DATA_DIR, 'facebook_config.json');
@@ -849,6 +854,7 @@ export async function syncFacebookPagePosts(options?: {
         'Authorization': `Bearer ${pageToken}`,
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(12000),
     });
 
     const resJson = await res.json();
@@ -1272,6 +1278,7 @@ export async function testFacebookConnection(pageIdInput?: string, pageTokenInpu
         'Authorization': `Bearer ${pageToken}`,
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(12000),
     });
 
     const data = await res.json();

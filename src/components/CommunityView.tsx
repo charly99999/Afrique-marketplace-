@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  fetchPosts, createPost, updatePost, deletePost,
+  fetchPosts, createPost, updatePost, deletePost, deleteOwnStoragePhoto,
   fetchComments, createComment, updateComment, deleteComment,
   blockUser, submitReport, uploadWebpImage, subscribeToRealtime,
   PostData, CommentData
@@ -8,7 +8,7 @@ import {
 import { 
   MessageSquare, Send, ShieldCheck, MoreVertical, 
   Trash2, Edit, Flag, Ban, Image as ImageIcon, X, 
-  Share2, Repeat2, ExternalLink
+  Share2, Repeat2, ExternalLink, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { isValidUuid } from '../lib/storage';
@@ -19,6 +19,10 @@ import {
   PostSocialStats, ReactorItem, fetchBatchSocialStats, 
   recordPostShare, REACTION_CONFIGS, ReactionType 
 } from '../lib/socialApi';
+import { appConfirm, appToast } from '../lib/feedback';
+import { SafeImage, SafeAvatar } from './SafeImage';
+
+const POSTS_PAGE_SIZE = 20;
 
 interface CommunityViewProps {
   currentUserId?: string;
@@ -35,6 +39,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 }) => {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
 
   // Social Stats map (postId -> stats)
   const [socialStatsMap, setSocialStatsMap] = useState<Record<string, PostSocialStats>>({});
@@ -63,6 +70,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [commentsMap, setCommentsMap] = useState<Record<string, CommentData[]>>({});
   const [newCommentContent, setNewCommentContent] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
 
@@ -80,9 +88,11 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
   const loadPosts = async () => {
     setLoading(true);
+    setPostsError(null);
     try {
-      const data = await fetchPosts(currentUserId);
+      const data = await fetchPosts(currentUserId, POSTS_PAGE_SIZE, 0);
       setPosts(data);
+      setHasMorePosts(data.length >= POSTS_PAGE_SIZE);
 
       // Load batch reactions & shares
       if (data.length > 0) {
@@ -90,10 +100,33 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
         const stats = await fetchBatchSocialStats(postIds, currentUserId);
         setSocialStatsMap(stats);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading posts:', err);
+      setPostsError(err?.message || 'Impossible de charger le fil social.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMorePosts = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = await fetchPosts(currentUserId, POSTS_PAGE_SIZE, posts.length);
+      setPosts((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const uniqueNext = nextPage.filter((p) => !existingIds.has(p.id));
+        return [...prev, ...uniqueNext];
+      });
+      setHasMorePosts(nextPage.length >= POSTS_PAGE_SIZE);
+      if (nextPage.length > 0) {
+        const extraStats = await fetchBatchSocialStats(nextPage.map((p) => p.id), currentUserId);
+        setSocialStatsMap((prev) => ({ ...prev, ...extraStats }));
+      }
+    } catch (err: any) {
+      appToast(err?.message || 'Impossible de charger plus de publications.', 'error');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -111,12 +144,17 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   }, [currentUserId]);
 
   const getAuthUserId = async (): Promise<string | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
+    let { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      try {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        session = refreshed?.session || null;
+      } catch {
+        session = null;
+      }
+    }
     if (session?.user?.id && isValidUuid(session.user.id)) {
       return session.user.id;
-    }
-    if (currentUserId && isValidUuid(currentUserId)) {
-      return currentUserId;
     }
     return null;
   };
@@ -137,7 +175,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       setNewPostImages((prev) => [...prev, url]);
     } catch (err: any) {
       console.error(err);
-      alert(`Erreur photo : ${err.message || 'Téléversement échoué'}`);
+      appToast(`Erreur photo : ${err.message || 'Téléversement échoué'}`, 'error');
     } finally {
       setIsUploadingPhoto(false);
       e.target.value = '';
@@ -163,7 +201,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       setNewPostImages([]);
     } catch (err: any) {
       console.error(err);
-      alert(`Publication impossible : ${err.message || 'Erreur inconnue'}`);
+      appToast(`Publication impossible : ${err.message || 'Erreur inconnue'}`, 'error');
     } finally {
       setIsPublishing(false);
     }
@@ -237,13 +275,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   };
 
   const handleCreateComment = async (postId: string) => {
+    if (isSubmittingComment || !newCommentContent.trim()) return;
     const authUid = await getAuthUserId();
     if (!authUid) {
       onRequireAuth();
       return;
     }
-    if (!newCommentContent.trim()) return;
 
+    setIsSubmittingComment(true);
     try {
       const comment = await createComment(postId, authUid, newCommentContent.trim());
       const comments = await fetchComments(postId);
@@ -256,20 +295,39 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       setNewCommentContent('');
       await loadPosts();
     } catch (err: any) {
-      alert(`Commentaire impossible : ${err.message}`);
+      appToast(`Commentaire impossible : ${err.message || 'Erreur réseau'}`, 'error');
+    } finally {
+      setIsSubmittingComment(false);
     }
   };
 
   const handleDeletePost = async (postId: string) => {
     const authUid = await getAuthUserId();
-    if (!authUid) return;
-    if (confirm('Voulez-vous vraiment supprimer cette publication ?')) {
+    if (!authUid) {
+      onRequireAuth();
+      return;
+    }
+    const confirmed = await appConfirm({
+      title: 'Supprimer la publication',
+      message: 'Voulez-vous vraiment supprimer cette publication ?',
+      confirmText: 'Supprimer',
+      cancelText: 'Annuler',
+      danger: true,
+    });
+    if (confirmed) {
+      const targetPost = posts.find((p) => p.id === postId);
       try {
         await deletePost(postId, authUid);
+        if (targetPost?.images && targetPost.images.length > 0) {
+          Promise.all(
+            targetPost.images.map((url) => deleteOwnStoragePhoto('posts', authUid, url))
+          ).catch(() => {});
+        }
         await loadPosts();
         setActiveMenuId(null);
+        appToast('Publication supprimée.', 'success');
       } catch (err: any) {
-        alert(`Suppression impossible : ${err.message}`);
+        appToast(`Suppression impossible : ${err.message || 'Erreur réseau'}`, 'error');
       }
     }
   };
@@ -282,37 +340,53 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       await loadPosts();
       setEditingPostId(null);
       setActiveMenuId(null);
+      appToast('Publication mise à jour.', 'success');
     } catch (err: any) {
-      alert(`Modification impossible : ${err.message}`);
+      appToast(`Modification impossible : ${err.message || 'Erreur réseau'}`, 'error');
     }
   };
 
   const handleDeleteComment = async (postId: string, commentId: string) => {
     const authUid = await getAuthUserId();
     if (!authUid) return;
-    if (confirm('Supprimer votre commentaire ?')) {
-      await deleteComment(commentId, authUid);
-      setCommentsMap((prev) => ({
-        ...prev,
-        [postId]: (prev[postId] || []).filter((c) => c.id !== commentId),
-      }));
-      setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, comments_count: Math.max(0, p.comments_count - 1) } : p))
-      );
+    const confirmed = await appConfirm({
+      title: 'Supprimer le commentaire',
+      message: 'Voulez-vous vraiment supprimer votre commentaire ?',
+      confirmText: 'Supprimer',
+      cancelText: 'Annuler',
+      danger: true,
+    });
+    if (confirmed) {
+      try {
+        await deleteComment(commentId, authUid);
+        setCommentsMap((prev) => ({
+          ...prev,
+          [postId]: (prev[postId] || []).filter((c) => c.id !== commentId),
+        }));
+        setPosts((prev) =>
+          prev.map((p) => (p.id === postId ? { ...p, comments_count: Math.max(0, p.comments_count - 1) } : p))
+        );
+      } catch (err: any) {
+        appToast(`Suppression impossible : ${err.message || 'Erreur réseau'}`, 'error');
+      }
     }
   };
 
   const handleSaveEditComment = async (postId: string, commentId: string) => {
     const authUid = await getAuthUserId();
     if (!authUid || !editingCommentContent.trim()) return;
-    await updateComment(commentId, authUid, editingCommentContent.trim());
-    setCommentsMap((prev) => ({
-      ...prev,
-      [postId]: (prev[postId] || []).map((c) =>
-        c.id === commentId ? { ...c, content: editingCommentContent.trim() } : c
-      ),
-    }));
-    setEditingCommentId(null);
+    try {
+      await updateComment(commentId, authUid, editingCommentContent.trim());
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map((c) =>
+          c.id === commentId ? { ...c, content: editingCommentContent.trim() } : c
+        ),
+      }));
+      setEditingCommentId(null);
+    } catch (err: any) {
+      appToast(`Modification impossible : ${err.message || 'Erreur réseau'}`, 'error');
+    }
   };
 
   const handleBlockAuthor = async (authorId: string) => {
@@ -321,10 +395,22 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       onRequireAuth();
       return;
     }
-    if (confirm('Voulez-vous bloquer cet utilisateur ? Ses publications et annonces ne s’afficheront plus.')) {
-      await blockUser(authUid, authorId);
-      setPosts((prev) => prev.filter((p) => p.user_id !== authorId));
-      setActiveMenuId(null);
+    const confirmed = await appConfirm({
+      title: "Bloquer l'auteur",
+      message: 'Voulez-vous bloquer cet utilisateur ? Ses publications et annonces ne s’afficheront plus.',
+      confirmText: 'Bloquer',
+      cancelText: 'Annuler',
+      danger: true,
+    });
+    if (confirmed) {
+      try {
+        await blockUser(authUid, authorId);
+        setPosts((prev) => prev.filter((p) => p.user_id !== authorId));
+        setActiveMenuId(null);
+        appToast('Utilisateur bloqué.', 'info');
+      } catch (err: any) {
+        appToast(`Impossible de bloquer : ${err.message || 'Erreur réseau'}`, 'error');
+      }
     }
   };
 
@@ -334,17 +420,21 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       onRequireAuth();
       return;
     }
-    await submitReport({
-      reporter_id: authUid,
-      target_type: 'post',
-      target_id: reportingPostId,
-      reason: reportReason,
-    });
-    setReportFeedback('Publication signalée à la modération.');
-    setTimeout(() => {
-      setReportingPostId(null);
-      setReportFeedback(null);
-    }, 2000);
+    try {
+      await submitReport({
+        reporter_id: authUid,
+        target_type: 'post',
+        target_id: reportingPostId,
+        reason: reportReason,
+      });
+      setReportFeedback('Publication signalée à la modération.');
+      setTimeout(() => {
+        setReportingPostId(null);
+        setReportFeedback(null);
+      }, 2000);
+    } catch (err: any) {
+      appToast(`Signalement impossible : ${err.message || 'Erreur réseau'}`, 'error');
+    }
   };
 
   return (
@@ -363,17 +453,13 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
         <form onSubmit={handleCreatePost} className="space-y-3">
           <div className="flex items-start gap-3">
-            {currentUserAvatar ? (
-              <img
-                src={currentUserAvatar}
-                alt=""
-                className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF] shrink-0 mt-0.5"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-xs shrink-0 mt-0.5">
-                {currentUserName ? currentUserName[0].toUpperCase() : 'AB'}
-              </div>
-            )}
+            <SafeAvatar
+              src={currentUserAvatar}
+              alt={currentUserName || 'Profil'}
+              initials={currentUserName ? currentUserName[0].toUpperCase() : 'AB'}
+              className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF] shrink-0 mt-0.5"
+              fallbackClassName="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-xs shrink-0 mt-0.5"
+            />
 
             <textarea
               rows={2}
@@ -398,10 +484,15 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <div className="flex gap-2 overflow-x-auto py-1 pl-13">
               {newPostImages.map((img, i) => (
                 <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E5E8EF] shrink-0 shadow-xs">
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <SafeImage src={img} alt="Photo jointe" className="w-full h-full object-cover" />
                   <button
                     type="button"
-                    onClick={() => setNewPostImages((prev) => prev.filter((_, idx) => idx !== i))}
+                    onClick={() => {
+                      setNewPostImages((prev) => prev.filter((_, idx) => idx !== i));
+                      if (currentUserId && isValidUuid(currentUserId)) {
+                        deleteOwnStoragePhoto('posts', currentUserId, img).catch(() => {});
+                      }
+                    }}
                     className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white hover:bg-black"
                   >
                     <X className="w-3 h-3" />
@@ -443,6 +534,23 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           </div>
         </form>
       </div>
+
+      {postsError && (
+        <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-800 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span className="font-semibold">{postsError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={loadPosts}
+            className="px-3 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 cursor-pointer flex items-center gap-1"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Réessayer</span>
+          </button>
+        </div>
+      )}
 
       {/* Posts List */}
       {loading ? (
@@ -521,17 +629,13 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                 {/* Author Info & Dropdown Menu */}
                 <div className="flex items-center justify-between relative">
                   <div className="flex items-center gap-3">
-                    {post.author?.avatar_url ? (
-                      <img
-                        src={post.author.avatar_url}
-                        alt=""
-                        className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF] bg-[#F1F4F9]"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold flex items-center justify-center text-xs">
-                        {authorInitials}
-                      </div>
-                    )}
+                    <SafeAvatar
+                      src={post.author?.avatar_url}
+                      alt={authorName}
+                      initials={authorInitials}
+                      className="w-10 h-10 rounded-full object-cover border border-[#E5E8EF] bg-[#F1F4F9]"
+                      fallbackClassName="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold flex items-center justify-center text-xs"
+                    />
                     <div>
                       <h4 className="text-xs font-bold text-[#172033] flex items-center gap-1">
                         <span>{authorName}</span>
@@ -648,17 +752,13 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         {/* Original Author */}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {sharedData.originalAuthorAvatar ? (
-                              <img
-                                src={sharedData.originalAuthorAvatar}
-                                alt=""
-                                className="w-8 h-8 rounded-full object-cover border border-[#E5E8EF]"
-                              />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-[#C69A35] text-[#172033] font-bold text-[10px] flex items-center justify-center">
-                                {sharedData.originalAuthorName[0]}
-                              </div>
-                            )}
+                            <SafeAvatar
+                              src={sharedData.originalAuthorAvatar}
+                              alt={sharedData.originalAuthorName}
+                              initials={(sharedData.originalAuthorName || 'A')[0]}
+                              className="w-8 h-8 rounded-full object-cover border border-[#E5E8EF]"
+                              fallbackClassName="w-8 h-8 rounded-full bg-[#C69A35] text-[#172033] font-bold text-[10px] flex items-center justify-center"
+                            />
                             <div>
                               <div className="flex items-center gap-1">
                                 <span className="text-xs font-bold text-[#172033]">
@@ -701,9 +801,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                                 key={idx}
                                 className="relative aspect-video bg-[#F1F4F9] rounded-lg overflow-hidden border border-[#E5E8EF]"
                               >
-                                <img
+                                <SafeImage
                                   src={img}
-                                  alt=""
+                                  alt="Photo publication partagée"
                                   className="w-full h-full object-cover"
                                   loading="lazy"
                                 />
@@ -724,14 +824,11 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         key={idx}
                         className="relative aspect-video bg-[#F1F4F9] rounded-lg overflow-hidden border border-[#E5E8EF]"
                       >
-                        <img
+                        <SafeImage
                           src={img}
                           alt="Photo publication"
-                          className="w-full h-full object-cover"
                           loading="lazy"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
+                          className="w-full h-full object-cover"
                         />
                       </div>
                     ))}
@@ -848,7 +945,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       />
                       <button
                         onClick={() => handleCreateComment(post.id)}
-                        disabled={!newCommentContent.trim()}
+                        disabled={isSubmittingComment || !newCommentContent.trim()}
                         className="p-2 rounded-xl bg-[#C69A35] text-[#172033] hover:brightness-105 disabled:opacity-40 transition-all shadow-xs cursor-pointer"
                       >
                         <Send className="w-4 h-4 stroke-[2.5]" />
@@ -937,6 +1034,19 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
               </article>
             );
           })}
+
+          {hasMorePosts && (
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                disabled={loadingMore}
+                onClick={handleLoadMorePosts}
+                className="px-6 py-2.5 rounded-xl bg-white hover:bg-[#F8F9FC] text-[#172033] text-xs font-bold border border-[#E5E8EF] transition-colors cursor-pointer disabled:opacity-50 min-h-[42px] shadow-xs"
+              >
+                {loadingMore ? 'Chargement...' : 'Afficher plus de publications'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

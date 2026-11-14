@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   fetchConversations, fetchMessages, sendMessage, markConversationAsRead, 
-  rpcGetContactPhone, uploadWebpImage, subscribeToRealtime, 
+  rpcGetContactPhone, uploadWebpImage, subscribeToRealtime, downloadImageSafely,
   ConversationData, MessageData 
 } from '../lib/supabaseData';
-import { 
-  Send, Phone, ArrowLeft, Image as ImageIcon, 
-  MessageSquare, CheckCheck, Compass, ShieldCheck
+import {
+  Send, Phone, ArrowLeft, Image as ImageIcon,
+  MessageSquare, CheckCheck, Compass, ShieldCheck, Download, AlertTriangle, RefreshCw
 } from 'lucide-react';
+import { appToast } from '../lib/feedback';
+import { SafeImage, SafeAvatar } from './SafeImage';
 
 interface MessagesViewProps {
   currentUserId?: string;
   activeConversationId?: string | null;
   onSelectConversation?: (convId: string) => void;
+  onUnreadCountChange?: (totalUnread: number) => void;
   onNavigateExplore: () => void;
   onRequireAuth: () => void;
 }
@@ -21,6 +24,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   currentUserId,
   activeConversationId,
   onSelectConversation,
+  onUnreadCountChange,
   onNavigateExplore,
   onRequireAuth,
 }) => {
@@ -32,6 +36,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [contactPhone, setContactPhone] = useState<string | null>(null);
   const [loadingConv, setLoadingConv] = useState(true);
+  const [convError, setConvError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,13 +44,22 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const loadConvs = async () => {
     if (!currentUserId) {
       setLoadingConv(false);
+      onUnreadCountChange?.(0);
       return;
     }
-    const list = await fetchConversations(currentUserId);
-    setConversations(list);
-    setLoadingConv(false);
-    if (!selectedConvId && list.length > 0) {
-      setSelectedConvId(list[0].id);
+    setConvError(null);
+    try {
+      const list = await fetchConversations(currentUserId);
+      setConversations(list);
+      const totalUnread = list.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+      onUnreadCountChange?.(totalUnread);
+      if (!selectedConvId && list.length > 0) {
+        setSelectedConvId(list[0].id);
+      }
+    } catch (err: any) {
+      setConvError(err?.message || 'Impossible de charger vos discussions.');
+    } finally {
+      setLoadingConv(false);
     }
   };
 
@@ -65,9 +79,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   useEffect(() => {
     if (!selectedConvId || !currentUserId) return;
 
-    fetchMessages(selectedConvId).then((msgs) => {
+    fetchMessages(selectedConvId).then(async (msgs) => {
       setMessages(msgs);
-      markConversationAsRead(selectedConvId, currentUserId);
+      try {
+        await markConversationAsRead(selectedConvId, currentUserId);
+        setConversations((prev) => {
+          const updated = prev.map((c) =>
+            c.id === selectedConvId ? { ...c, unread_count: 0 } : c
+          );
+          const totalUnread = updated.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+          onUnreadCountChange?.(totalUnread);
+          return updated;
+        });
+      } catch {
+        // ignore read sync error
+      }
     });
 
     // Fetch other user phone via RPC
@@ -77,15 +103,17 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       });
     }
 
-    // Subscribe to realtime messages
-    const unsub = subscribeToRealtime('messages', (newMsg: MessageData) => {
+    // Subscribe to realtime messages (extract payload.new from Supabase Postgres changes)
+    const unsub = subscribeToRealtime('messages', (payload: any) => {
+      const newMsg = (payload?.new || payload) as MessageData;
+      if (!newMsg?.id) return;
       if (newMsg.conversation_id === selectedConvId) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMsg.id)) return prev;
           return [...prev, newMsg];
         });
         if (newMsg.sender_id !== currentUserId) {
-          markConversationAsRead(selectedConvId, currentUserId);
+          markConversationAsRead(selectedConvId, currentUserId).catch(() => {});
         }
       }
       loadConvs();
@@ -102,7 +130,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim() || !selectedConvId || !currentUserId) return;
+    if (!inputText.trim() || !selectedConvId || !currentUserId || isSending) return;
 
     const text = inputText.trim();
     setInputText('');
@@ -115,8 +143,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         return [...prev, newMsg];
       });
       loadConvs();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setInputText(text);
+      appToast(err?.message || "Impossible d'envoyer le message.", 'error');
     } finally {
       setIsSending(false);
     }
@@ -124,18 +154,26 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const handleSendPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedConvId || !currentUserId) return;
+    if (!file || !selectedConvId || !currentUserId) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     setIsUploadingPhoto(true);
     try {
       const url = await uploadWebpImage('chat', currentUserId, file, selectedConvId);
       const newMsg = await sendMessage(selectedConvId, currentUserId, '📷 Photo', url);
-      setMessages((prev) => [...prev, newMsg]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
       loadConvs();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sending chat photo:', err);
+      appToast(err?.message || "Échec de l'envoi de la photo.", 'error');
     } finally {
       setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -163,6 +201,27 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     return (
       <div className="py-20 text-center text-xs text-[#596273]">
         Chargement de vos discussions...
+      </div>
+    );
+  }
+
+  if (convError && conversations.length === 0) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center space-y-3">
+        <AlertTriangle className="w-10 h-10 text-red-500 mx-auto" />
+        <h3 className="text-sm font-bold text-[#172033]">Erreur de connexion</h3>
+        <p className="text-xs text-[#596273]">{convError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoadingConv(true);
+            loadConvs();
+          }}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-bold cursor-pointer"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Réessayer</span>
+        </button>
       </div>
     );
   }
@@ -222,17 +281,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     isSelected ? 'bg-amber-50/70 border-l-4 border-[#C69A35]' : 'hover:bg-[#F8F9FC]'
                   }`}
                 >
-                  {conv.other_user?.avatar_url ? (
-                    <img
-                      src={conv.other_user.avatar_url}
-                      alt=""
-                      className="w-10 h-10 rounded-full object-cover border-2 border-[#C69A35]/40 bg-[#F1F4F9] shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-xs shrink-0 shadow-xs">
-                      {initials}
-                    </div>
-                  )}
+                  <SafeAvatar
+                    src={conv.other_user?.avatar_url}
+                    alt={otherName}
+                    initials={initials}
+                    className="w-10 h-10 rounded-full object-cover border-2 border-[#C69A35]/40 bg-[#F1F4F9] shrink-0"
+                    fallbackClassName="w-10 h-10 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-black flex items-center justify-center text-xs shrink-0 shadow-xs"
+                  />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
@@ -321,8 +376,29 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                         }`}
                       >
                         {msg.image_url && (
-                          <div className="mb-2 rounded-xl overflow-hidden max-h-56 bg-gray-100 border border-[#E5E8EF]">
-                            <img src={msg.image_url} alt="" className="w-full h-full object-cover" />
+                          <div className="relative mb-2 rounded-xl overflow-hidden max-h-56 bg-gray-100 border border-[#E5E8EF] group">
+                            <SafeImage
+                              src={msg.image_url}
+                              alt="Photo envoyée"
+                              loading="lazy"
+                              className="w-full h-full max-h-56 object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={async (ev) => {
+                                ev.stopPropagation();
+                                try {
+                                  await downloadImageSafely(msg.image_url!, `message-${msg.id}`);
+                                  appToast('Photo téléchargée.', 'success');
+                                } catch (err: any) {
+                                  appToast(err?.message || 'Téléchargement impossible.', 'error');
+                                }
+                              }}
+                              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/65 text-white hover:bg-black/85 cursor-pointer transition-opacity"
+                              title="Télécharger la photo"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         )}
                         <p className="whitespace-pre-line">{msg.content}</p>

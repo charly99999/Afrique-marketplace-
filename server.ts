@@ -37,7 +37,7 @@ import {
   hashPassword,
   verifyPassword
 } from './src/server/authStore.ts';
-import { sanitizeText, isValidPhoneNumber, isValidEmail } from './src/lib/security.ts';
+import { sanitizeText, isValidPhoneNumber, isValidEmail, hasValidImageMagicBytes } from './src/lib/security.ts';
 
 dotenv.config();
 
@@ -45,7 +45,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 3000;
+const cliPortIdx = process.argv.indexOf('--port');
+const cliPort = cliPortIdx !== -1 && process.argv[cliPortIdx + 1] ? Number(process.argv[cliPortIdx + 1]) : NaN;
+const envPort = process.env.PORT && process.env.PORT !== process.env.NGINX_PORT ? Number(process.env.PORT) : NaN;
+const port = Number.isFinite(cliPort) && cliPort > 0
+  ? cliPort
+  : (Number.isFinite(envPort) && envPort > 0 ? envPort : Number(process.env.DEFAULT_APP_PORT || 3000));
 
 // Security: Disable Express fingerprinting
 app.disable('x-powered-by');
@@ -107,7 +112,7 @@ setInterval(() => {
       rateLimitMap.delete(key);
     }
   }
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000).unref();
 
 // Helper to get client IP safely
 function getClientIp(req: express.Request): string {
@@ -120,7 +125,6 @@ function getClientIp(req: express.Request): string {
 
 // In-memory OTP storage for SMS verification with brute-force defense
 interface OtpRecord {
-  simulated?: boolean; // code affiché au client faute de SMS réel : ne doit jamais servir à se connecter ou changer un mot de passe
   code: string;
   expiresAt: number;
   attempts: number;
@@ -137,7 +141,7 @@ setInterval(() => {
       otpStore.delete(phone);
     }
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 
 // ----------------------------------------------------
 // 1. Twilio / Pan-African Gateway SMS OTP Authentication
@@ -207,6 +211,9 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
     const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
     const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
 
+    const allowDevSimulator =
+      process.env.ALLOW_DEV_OTP_SIMULATOR === 'true' && process.env.NODE_ENV !== 'production';
+
     if (twilioSid && twilioAuthToken && twilioFrom) {
       // Send real SMS via Twilio API
       const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
@@ -222,17 +229,24 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: params.toString(),
+        signal: AbortSignal.timeout(12000),
       });
 
       if (!twilioRes.ok) {
         const twilioErr = await twilioRes.text();
-        console.warn('[Twilio Error] Fallback to simulated delivery:', twilioErr);
-        otpStore.set(cleanPhone, { code, expiresAt, attempts: 0, lastRequestedAt: now, simulated: true });
-        return res.json({
-          success: true,
-          simulated: true,
-          otp: code,
-          message: `Code de confirmation SMS : ${code}`,
+        console.warn('[Twilio Error] SMS delivery failed:', twilioErr);
+        if (allowDevSimulator) {
+          return res.json({
+            success: true,
+            simulated: true,
+            otp: code,
+            message: `[Mode dev] Code de confirmation SMS : ${code}`,
+          });
+        }
+        otpStore.delete(cleanPhone);
+        return res.status(503).json({
+          success: false,
+          message: 'L’envoi du SMS a échoué temporairement. Veuillez utiliser la connexion ou réinitialisation par e-mail.',
         });
       }
 
@@ -243,14 +257,20 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
       });
     }
 
-    // Fallback: Simulator mode with clear display for dev/testing
-    console.log(`[SMS Gateway Simulator] OTP verification code generated for ${cleanPhone}.`);
-    otpStore.set(cleanPhone, { code, expiresAt, attempts: 0, lastRequestedAt: now, simulated: true });
-    return res.json({
-      success: true,
-      simulated: true,
-      otp: code,
-      message: `Code de vérification envoyé par SMS au ${cleanPhone} : ${code} (Valable 5 min).`,
+    if (allowDevSimulator) {
+      console.log(`[SMS Gateway Dev Simulator] OTP verification code generated for ${cleanPhone}.`);
+      return res.json({
+        success: true,
+        simulated: true,
+        otp: code,
+        message: `[Mode dev] Code SMS généré pour ${cleanPhone} : ${code} (Valable 5 min).`,
+      });
+    }
+
+    otpStore.delete(cleanPhone);
+    return res.status(503).json({
+      success: false,
+      message: 'Service SMS non configuré sur cet environnement. Veuillez utiliser votre adresse e-mail et mot de passe.',
     });
   } catch (error: any) {
     console.error('Error sending SMS OTP:', error);
@@ -335,16 +355,57 @@ app.post('/api/auth/verify-sms-otp', (req, res) => {
   }
 });
 
-// Supabase Admin Client for secure auth creation
+// Supabase Clients for JWT verification and admin provisioning
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wlvzjhpfcvwcgyelpsnx.supabase.co';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Gd_1w7RmnkKKeQ5RhobaPw_MPrka48J';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseAnonClient = createClient(supabaseUrl, supabaseAnonKey);
 const supabaseAdmin = (supabaseUrl && serviceRoleKey) ? createClient(supabaseUrl, serviceRoleKey) : null;
+
+async function verifyRequestSupabaseUser(req: express.Request) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.substring(7).trim();
+  if (!token) return null;
+
+  try {
+    const client = supabaseAdmin || supabaseAnonClient;
+    const { data, error } = await client.auth.getUser(token);
+    if (error || !data?.user) {
+      return null;
+    }
+    return data.user;
+  } catch {
+    return null;
+  }
+}
+
+const SERVER_START_TIME = Date.now();
+const APP_VERSION = '3.0.0';
+const COMMIT_SHA = process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || 'local';
+
+// Cloud Run / Docker / Uptime healthcheck
+app.get('/healthz', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    status: 'ok',
+    service: 'afrique-business',
+    region: process.env.CLOUD_RUN_REGION || process.env.K_REVISION ? 'europe-west2' : 'local',
+    environment: process.env.NODE_ENV || 'development',
+    version: APP_VERSION,
+    commitSha: COMMIT_SHA,
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Expose public runtime config
 app.get('/api/config', (_req, res) => {
   res.json({
-    supabaseUrl: process.env.VITE_SUPABASE_URL || '',
-    supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || '',
+    supabaseUrl,
+    supabaseAnonKey,
   });
 });
 
@@ -402,7 +463,7 @@ app.post('/api/auth/login-with-password', async (req, res) => {
   }
 });
 
-// 2. Quick SMS OTP Login (Immediate access with OTP code, no password required)
+// 2. Quick SMS OTP Login (Immediate access with OTP code + real Supabase session via Admin MagicLink)
 app.post('/api/auth/quick-sms-login', async (req, res) => {
   try {
     const { phone, code } = req.body;
@@ -410,22 +471,32 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Téléphone et code SMS requis.' });
     }
 
+    const clientIp = getClientIp(req);
+    if (!checkRateLimit(`ip_sms_login_${clientIp}`, 15, 10 * 60 * 1000)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Trop de tentatives de connexion par SMS. Veuillez patienter 10 minutes.',
+      });
+    }
+
     const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
     const cleanDigits = cleanPhone.replace(/[^\d]/g, '');
     const entry = otpStore.get(cleanPhone);
+    const now = Date.now();
 
     if (!entry) {
       return res.status(400).json({ success: false, message: 'Aucun code SMS actif pour ce numéro ou code expiré.' });
     }
 
-    if (entry.simulated) {
-      return res.status(503).json({
+    if (entry.lockedUntil && now < entry.lockedUntil) {
+      const waitMinutes = Math.ceil((entry.lockedUntil - now) / 60000);
+      return res.status(429).json({
         success: false,
-        message: "Le service SMS n'est pas encore activé : connectez-vous avec votre mot de passe.",
+        message: `Numéro temporairement verrouillé suite à 5 tentatives infructueuses. Réessayez dans ${waitMinutes} minute(s).`,
       });
     }
 
-    if (Date.now() > entry.expiresAt) {
+    if (now > entry.expiresAt) {
       otpStore.delete(cleanPhone);
       return res.status(400).json({ success: false, message: 'Le code SMS a expiré. Veuillez en redemander un.' });
     }
@@ -434,10 +505,11 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
       entry.attempts = (entry.attempts || 0) + 1;
       const remaining = 5 - entry.attempts;
       if (entry.attempts >= 5) {
-        otpStore.delete(cleanPhone);
+        entry.lockedUntil = now + 15 * 60 * 1000;
+        entry.code = '';
         return res.status(429).json({
           success: false,
-          message: 'Code SMS incorrect. Vous avez épuisé vos 5 tentatives.',
+          message: 'Code SMS incorrect. Vous avez épuisé vos 5 tentatives. Numéro verrouillé pendant 15 minutes.',
         });
       }
       return res.status(400).json({ success: false, message: `Code SMS incorrect. Il vous reste ${remaining} tentative(s).` });
@@ -448,24 +520,73 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
 
     // Find existing user or seed
     let userCred = findUserCredential(cleanPhone);
+    const isNewPhoneUser = !userCred;
     if (!userCred) {
-      // If it's Marc Arnaud's number
       if (cleanDigits === '2250565242349' || cleanDigits === '0565242349' || cleanDigits === '565242349') {
         userCred = getOrSeedAdminUser();
       } else {
         userCred = registerUserCredential({
           phone: cleanPhone,
+          email: `auth_${cleanDigits}@afrique-business.internal`,
           fullName: 'Membre ' + cleanPhone.slice(-4),
-          password: crypto.randomBytes(8).toString('hex'),
+          password: crypto.randomBytes(12).toString('hex'),
           city: 'Abidjan',
           country: 'CI',
         });
       }
     }
 
+    let supabaseSessionTokenHash: string | null = null;
+    let supabaseSessionEmail: string | null = null;
+
+    if (supabaseAdmin) {
+      const targetEmail = userCred.email || `auth_${cleanDigits}@afrique-business.internal`;
+      try {
+        const { data: existingAuth } = await supabaseAdmin.auth.admin.getUserById(userCred.userId);
+        if (!existingAuth?.user && isNewPhoneUser) {
+          await supabaseAdmin.auth.admin.createUser({
+            id: userCred.userId,
+            phone: cleanPhone,
+            phone_confirm: true,
+            email: targetEmail,
+            email_confirm: true,
+            password: crypto.randomBytes(16).toString('hex'),
+            user_metadata: {
+              full_name: userCred.fullName,
+              city: userCred.city || 'Abidjan',
+              country: userCred.country || 'CI',
+              phone: cleanPhone,
+            },
+          });
+        }
+        const effectiveEmail = existingAuth?.user?.email || targetEmail;
+        const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+          type: 'magiclink',
+          email: effectiveEmail,
+        });
+        if (!linkErr && linkData?.properties?.hashed_token) {
+          supabaseSessionTokenHash = linkData.properties.hashed_token;
+          supabaseSessionEmail = effectiveEmail;
+        }
+      } catch (adminErr) {
+        console.warn('Quick SMS Supabase session link warning:', adminErr);
+      }
+    }
+
+    if (!supabaseSessionTokenHash) {
+      return res.status(503).json({
+        success: false,
+        supabaseSynced: false,
+        message: 'La connexion rapide par SMS nécessite le service Supabase Admin configuré sur le serveur. Veuillez vous connecter avec votre e-mail/téléphone et mot de passe.',
+      });
+    }
+
     const nameParts = (userCred.fullName || 'Utilisateur').split(' ');
     return res.json({
       success: true,
+      supabaseSynced: true,
+      supabaseSessionTokenHash,
+      supabaseSessionEmail,
       user: {
         id: userCred.userId,
         fullName: userCred.fullName,
@@ -490,47 +611,91 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
   }
 });
 
-// 3. Register user (Never fails, persists in secure credential store + Supabase)
+// 3. Register user (Requires verified SMS OTP code & prevents account takeover)
 app.post('/api/auth/register-user', async (req, res) => {
   try {
-    const { phone, password, fullName, city, country } = req.body;
-    if (!phone || !password || !fullName) {
-      return res.status(400).json({ success: false, message: 'Informations incomplètes (téléphone, mot de passe et nom requis).' });
+    const { phone, password, fullName, city, country, code } = req.body;
+    if (!phone || !password || !fullName || !code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Informations incomplètes (téléphone, code SMS, mot de passe et nom requis).',
+      });
     }
 
-    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (String(password).length < 6 || String(password).length > 100) {
+      return res.status(400).json({ success: false, message: 'Le mot de passe doit comporter entre 6 et 100 caractères.' });
+    }
+
+    const cleanPhone = String(phone).replace(/[\s\-\(\)]/g, '');
+    if (!isValidPhoneNumber(cleanPhone)) {
+      return res.status(400).json({ success: false, message: 'Numéro de téléphone invalide.' });
+    }
+
+    const entry = otpStore.get(cleanPhone);
+    const now = Date.now();
+    if (!entry) {
+      return res.status(400).json({ success: false, message: 'Aucun code SMS actif pour ce numéro ou code expiré.' });
+    }
+    if (entry.lockedUntil && now < entry.lockedUntil) {
+      const waitMinutes = Math.ceil((entry.lockedUntil - now) / 60000);
+      return res.status(429).json({
+        success: false,
+        message: `Numéro temporairement verrouillé. Réessayez dans ${waitMinutes} minute(s).`,
+      });
+    }
+    if (now > entry.expiresAt) {
+      otpStore.delete(cleanPhone);
+      return res.status(400).json({ success: false, message: 'Le code SMS a expiré. Veuillez en redemander un.' });
+    }
+    if (entry.code.trim() !== String(code).trim()) {
+      entry.attempts = (entry.attempts || 0) + 1;
+      const remaining = 5 - entry.attempts;
+      if (entry.attempts >= 5) {
+        entry.lockedUntil = now + 15 * 60 * 1000;
+        entry.code = '';
+        return res.status(429).json({
+          success: false,
+          message: 'Code SMS incorrect. Vous avez épuisé vos 5 tentatives. Numéro verrouillé pendant 15 minutes.',
+        });
+      }
+      return res.status(400).json({ success: false, message: `Code SMS incorrect. Il vous reste ${remaining} tentative(s).` });
+    }
+
+    // Consume OTP on success
+    otpStore.delete(cleanPhone);
+
+    // Prevent account overwrite if phone already registered
+    const existingCred = findUserCredential(cleanPhone);
+    if (existingCred) {
+      return res.status(409).json({
+        success: false,
+        message: 'Un compte existe déjà avec ce numéro de téléphone. Veuillez vous connecter ou réinitialiser votre mot de passe.',
+      });
+    }
+
     const cleanDigits = cleanPhone.replace(/[^\d]/g, '');
     const internalEmail = `auth_${cleanDigits}@afrique-business.internal`;
+    const cleanFullName = sanitizeText(fullName, 100) || 'Utilisateur';
+    const cleanCity = sanitizeText(city || 'Abidjan', 60) || 'Abidjan';
+    const cleanCountry = sanitizeText(country || 'CI', 5) || 'CI';
 
-    // 1. Register or update in user_credentials.json
+    // 1. Register in server credential store
     const userCred = registerUserCredential({
       phone: cleanPhone,
+      email: internalEmail,
       password,
-      fullName: fullName.trim(),
-      city: city || 'Abidjan',
-      country: country || 'CI',
+      fullName: cleanFullName,
+      city: cleanCity,
+      country: cleanCountry,
     });
 
     const userId = userCred.userId;
 
-    // 2. Sync to Supabase profiles table if accessible
-    try {
-      const publicClient = createClient(supabaseUrl, process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Gd_1w7RmnkKKeQ5RhobaPw_MPrka48J');
-      await publicClient.from('profiles').upsert({
-        id: userId,
-        full_name: fullName.trim(),
-        phone_verified: true,
-        city: city || 'Abidjan',
-        country: country || 'CI',
-      });
-    } catch (dbErr) {
-      console.warn('Profile sync warning in register-user:', dbErr);
-    }
-
-    // 3. If admin client is available, also create Supabase Auth user
+    // 2. If admin client is available, create verified Supabase Auth user
+    let supabaseSynced = false;
     if (supabaseAdmin) {
       try {
-        await supabaseAdmin.auth.admin.createUser({
+        const { error: adminCreateErr } = await supabaseAdmin.auth.admin.createUser({
           id: userId,
           phone: cleanPhone,
           phone_confirm: true,
@@ -538,34 +703,39 @@ app.post('/api/auth/register-user', async (req, res) => {
           email_confirm: true,
           password: password,
           user_metadata: {
-            full_name: fullName.trim(),
-            city: city || 'Abidjan',
-            country: country || 'CI',
+            full_name: cleanFullName,
+            city: cleanCity,
+            country: cleanCountry,
             phone: cleanPhone,
           },
         });
+        if (!adminCreateErr) {
+          supabaseSynced = true;
+        }
       } catch (adminErr) {
         console.warn('Admin auth creation warning:', adminErr);
       }
     }
 
-    const nameParts = fullName.trim().split(' ');
+    const nameParts = cleanFullName.split(' ');
     return res.json({
       success: true,
+      supabaseSynced,
       userId,
       loginEmail: internalEmail,
       phone: cleanPhone,
-      fullName: fullName.trim(),
-      city: city || 'Abidjan',
-      country: country || 'CI',
+      fullName: cleanFullName,
+      city: cleanCity,
+      country: cleanCountry,
       user: {
         id: userId,
-        fullName: fullName.trim(),
-        firstName: nameParts[0] || fullName.trim(),
+        fullName: cleanFullName,
+        firstName: nameParts[0] || cleanFullName,
         lastName: nameParts.slice(1).join(' ') || '',
         phone: cleanPhone,
-        city: city || 'Abidjan',
-        country: country || 'CI',
+        email: internalEmail,
+        city: cleanCity,
+        country: cleanCountry,
         phone_verified: true,
         activeRole: 'BUYER',
         kycLevel: 1,
@@ -600,18 +770,20 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
     const cleanDigits = cleanPhone.replace(/[^\d]/g, '');
     const entry = otpStore.get(cleanPhone);
 
+    const now = Date.now();
     if (!entry) {
       return res.status(400).json({ success: false, message: 'Aucun code SMS actif pour ce numéro ou code expiré.' });
     }
 
-    if (entry.simulated) {
-      return res.status(503).json({
+    if (entry.lockedUntil && now < entry.lockedUntil) {
+      const waitMinutes = Math.ceil((entry.lockedUntil - now) / 60000);
+      return res.status(429).json({
         success: false,
-        message: "Le service SMS n'est pas encore activé : connectez-vous avec votre mot de passe.",
+        message: `Numéro temporairement verrouillé. Réessayez dans ${waitMinutes} minute(s).`,
       });
     }
 
-    if (Date.now() > entry.expiresAt) {
+    if (now > entry.expiresAt) {
       otpStore.delete(cleanPhone);
       return res.status(400).json({ success: false, message: 'Le code SMS a expiré. Veuillez en redemander un.' });
     }
@@ -620,10 +792,11 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
       entry.attempts = (entry.attempts || 0) + 1;
       const remaining = 5 - entry.attempts;
       if (entry.attempts >= 5) {
-        otpStore.delete(cleanPhone);
+        entry.lockedUntil = now + 15 * 60 * 1000;
+        entry.code = '';
         return res.status(429).json({
           success: false,
-          message: 'Code SMS incorrect. Vous avez épuisé vos 5 tentatives.',
+          message: 'Code SMS incorrect. Vous avez épuisé vos 5 tentatives. Numéro verrouillé pendant 15 minutes.',
         });
       }
       return res.status(400).json({ success: false, message: `Code SMS incorrect. Il vous reste ${remaining} tentative(s).` });
@@ -646,11 +819,15 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
     setUserPassword(userCred.userId, newPassword);
 
     // If supabaseAdmin is configured, also update Supabase Auth
+    let supabaseSynced = false;
     if (supabaseAdmin) {
       try {
-        await supabaseAdmin.auth.admin.updateUserById(userCred.userId, {
+        const { error: adminUpdErr } = await supabaseAdmin.auth.admin.updateUserById(userCred.userId, {
           password: newPassword,
         });
+        if (!adminUpdErr) {
+          supabaseSynced = true;
+        }
       } catch (adminErr) {
         console.warn('Supabase admin update password warning:', adminErr);
       }
@@ -659,6 +836,7 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
     const nameParts = (userCred.fullName || 'Utilisateur').split(' ');
     return res.json({
       success: true,
+      supabaseSynced,
       message: 'Votre mot de passe a été réinitialisé avec succès ! Vous êtes maintenant connecté.',
       user: {
         id: userCred.userId,
@@ -684,32 +862,44 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
   }
 });
 
-// 5. Change Password (For Settings Modal)
+// 5. Change Password (Authenticated via verified Supabase JWT)
 app.post('/api/auth/change-password', async (req, res) => {
   try {
-    const { userId, oldPassword, newPassword } = req.body;
-    if (!userId || !newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Identifiant et nouveau mot de passe (min 6 caractères) requis.' });
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise (session expirée).' });
     }
 
-    const userCred = findUserCredential(userId);
-    if (!userCred) {
-      return res.status(404).json({ success: false, message: 'Compte introuvable.' });
+    const { userId, oldPassword, newPassword } = req.body || {};
+    if (!newPassword || String(newPassword).length < 6 || String(newPassword).length > 100) {
+      return res.status(400).json({ success: false, message: 'Nouveau mot de passe requis (6 à 100 caractères).' });
     }
 
-    // If oldPassword is provided and passwordHash was set, verify it
-    if (oldPassword && userCred.passwordHash) {
-      if (!verifyPassword(oldPassword, userCred.passwordHash)) {
+    if (userId && userId !== authUser.id) {
+      return res.status(403).json({ success: false, message: 'Action non autorisée pour ce compte.' });
+    }
+
+    const targetUid = authUser.id;
+    const userCred = findUserCredential(targetUid);
+    if (userCred?.passwordHash) {
+      if (!oldPassword || !verifyPassword(String(oldPassword), userCred.passwordHash)) {
         return res.status(400).json({ success: false, message: 'Ancien mot de passe incorrect.' });
       }
+      setUserPassword(targetUid, String(newPassword));
+    } else {
+      registerUserCredential({
+        userId: targetUid,
+        email: authUser.email,
+        phone: authUser.phone,
+        fullName: (authUser.user_metadata?.full_name as string) || 'Utilisateur',
+        password: String(newPassword),
+      });
     }
-
-    setUserPassword(userId, newPassword);
 
     if (supabaseAdmin) {
       try {
-        await supabaseAdmin.auth.admin.updateUserById(userId, {
-          password: newPassword,
+        await supabaseAdmin.auth.admin.updateUserById(targetUid, {
+          password: String(newPassword),
         });
       } catch (adminErr) {
         console.warn('Supabase admin update password warning:', adminErr);
@@ -740,21 +930,58 @@ app.post('/api/auth/resolve-account', async (req, res) => {
     // Check if user has an account in our credentials store
     const localUser = findUserCredential(identifier);
 
-    const candidateEmails: string[] = [];
+    const candidateEmailsSet = new Set<string>();
     if (trimmed.includes('@')) {
-      candidateEmails.push(trimmed);
-    }
-    if (cleanDigits.length >= 8) {
-      candidateEmails.push(`auth_${cleanDigits}@afrique-business.internal`);
-      candidateEmails.push(`phone${cleanDigits}@afrique-business.app`);
-      if (cleanDigits === '2250565242349' || cleanDigits === '0565242349' || cleanDigits === '565242349') {
-        candidateEmails.push('marcarnaudkonan2@gmail.com');
-      }
-    }
-    if (localUser?.email && !candidateEmails.includes(localUser.email)) {
-      candidateEmails.push(localUser.email);
+      candidateEmailsSet.add(trimmed);
     }
 
+    if (
+      cleanDigits === '2250565242349' ||
+      cleanDigits === '0565242349' ||
+      cleanDigits === '565242349' ||
+      cleanDigits.endsWith('565242349') ||
+      trimmed === ADMIN_EMAIL.toLowerCase()
+    ) {
+      candidateEmailsSet.add(ADMIN_EMAIL);
+      candidateEmailsSet.add('marcarnaudkonan@gmail.com');
+    }
+
+    const digitVariants = new Set<string>();
+    if (cleanDigits.length >= 8) {
+      digitVariants.add(cleanDigits);
+      if (cleanDigits.startsWith('225') && cleanDigits.length > 3) {
+        digitVariants.add(cleanDigits.slice(3));
+        digitVariants.add('0' + cleanDigits.slice(3));
+      } else if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
+        digitVariants.add('225' + cleanDigits);
+        digitVariants.add('225' + cleanDigits.slice(1));
+      }
+    }
+
+    const domains = [
+      'afrique-business.internal',
+      'afrique-business.app',
+      'afrique-business.ci',
+      'afrique-business.com',
+      'afrique-afrique.com',
+    ];
+
+    for (const d of digitVariants) {
+      for (const dom of domains) {
+        candidateEmailsSet.add(`auth_${d}@${dom}`);
+        candidateEmailsSet.add(`user_${d}@${dom}`);
+        candidateEmailsSet.add(`phone_${d}@${dom}`);
+        candidateEmailsSet.add(`phone${d}@${dom}`);
+        candidateEmailsSet.add(`${d}@${dom}`);
+        candidateEmailsSet.add(`+${d}@${dom}`);
+      }
+    }
+
+    if (localUser?.email) {
+      candidateEmailsSet.add(localUser.email);
+    }
+
+    const candidateEmails = Array.from(candidateEmailsSet);
     const primaryEmail = candidateEmails[0] || (trimmed.includes('@') ? trimmed : `auth_${cleanDigits}@afrique-business.internal`);
 
     return res.json({
@@ -774,6 +1001,11 @@ app.post('/api/auth/resolve-account', async (req, res) => {
 // ----------------------------------------------------
 app.post('/api/email/send-transactional', async (req, res) => {
   try {
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise pour envoyer des e-mails.' });
+    }
+
     const { to, recipientName, type, productTitle } = req.body;
     if (!to || !isValidEmail(to)) {
       return res.status(400).json({ success: false, message: 'Adresse e-mail valide requise.' });
@@ -842,6 +1074,7 @@ app.post('/api/email/send-transactional', async (req, res) => {
           subject,
           html: htmlContent,
         }),
+        signal: AbortSignal.timeout(12000),
       });
 
       if (!resendRes.ok) {
@@ -878,7 +1111,8 @@ app.post('/api/email/send-transactional', async (req, res) => {
 // ----------------------------------------------------
 // Persistent Server Listings Store (Zero-Failure Fallback)
 // ----------------------------------------------------
-const SERVER_DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const SERVER_DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.resolve(process.cwd(), 'data');
 const SERVER_LISTINGS_FILE = path.join(SERVER_DATA_DIR, 'server_listings.json');
 
 function getServerListings(): any[] {
@@ -909,23 +1143,35 @@ app.get('/api/listings', (_req, res) => {
   res.json({ success: true, listings });
 });
 
-app.post('/api/listings', (req, res) => {
+app.post('/api/listings', async (req, res) => {
   try {
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise pour publier une annonce.' });
+    }
+
     const item = req.body;
     if (!item || !item.title) {
       return res.status(400).json({ success: false, message: 'Titre de l’annonce requis' });
     }
     const listings = getServerListings();
     const id = item.id || `lst_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const existingIdx = listings.findIndex((l: any) => l.id === id);
+    if (existingIdx >= 0 && listings[existingIdx].user_id !== authUser.id) {
+      return res.status(403).json({ success: false, message: 'Vous ne pouvez pas modifier l’annonce d’un autre utilisateur.' });
+    }
+
     const fullItem = {
       ...item,
       id,
+      user_id: authUser.id,
+      title: sanitizeText(item.title, 120),
+      description: sanitizeText(item.description || '', 5000),
       created_at: item.created_at || new Date().toISOString(),
       status: item.status || 'active',
     };
-    const idx = listings.findIndex((l: any) => l.id === id);
-    if (idx >= 0) {
-      listings[idx] = { ...listings[idx], ...fullItem, edited_at: new Date().toISOString() };
+    if (existingIdx >= 0) {
+      listings[existingIdx] = { ...listings[existingIdx], ...fullItem, edited_at: new Date().toISOString() };
     } else {
       listings.unshift(fullItem);
     }
@@ -936,27 +1182,49 @@ app.post('/api/listings', (req, res) => {
   }
 });
 
-app.put('/api/listings/:id', (req, res) => {
+app.put('/api/listings/:id', async (req, res) => {
   try {
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise.' });
+    }
+
     const { id } = req.params;
-    const body = req.body;
+    const body = req.body || {};
     const listings = getServerListings();
     const idx = listings.findIndex((l: any) => l.id === id);
-    if (idx >= 0) {
-      listings[idx] = { ...listings[idx], ...body, edited_at: new Date().toISOString() };
-      saveServerListings(listings);
-      return res.json({ success: true, listing: listings[idx] });
+    if (idx < 0) {
+      return res.status(404).json({ success: false, message: 'Annonce introuvable.' });
     }
-    return res.status(404).json({ success: false, message: 'Annonce introuvable.' });
+    if (listings[idx].user_id !== authUser.id) {
+      return res.status(403).json({ success: false, message: 'Action refusée : vous n’êtes pas le propriétaire.' });
+    }
+
+    listings[idx] = { ...listings[idx], ...body, user_id: authUser.id, edited_at: new Date().toISOString() };
+    saveServerListings(listings);
+    return res.json({ success: true, listing: listings[idx] });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-app.delete('/api/listings/:id', (req, res) => {
+app.delete('/api/listings/:id', async (req, res) => {
   try {
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise.' });
+    }
+
     const { id } = req.params;
     const listings = getServerListings();
+    const existing = listings.find((l: any) => l.id === id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Annonce introuvable.' });
+    }
+    if (existing.user_id !== authUser.id) {
+      return res.status(403).json({ success: false, message: 'Action refusée : vous n’êtes pas le propriétaire.' });
+    }
+
     const filtered = listings.filter((l: any) => l.id !== id);
     saveServerListings(filtered);
     res.json({ success: true, message: 'Annonce supprimée.' });
@@ -966,43 +1234,59 @@ app.delete('/api/listings/:id', (req, res) => {
 });
 
 // ----------------------------------------------------
-// Image Upload Endpoint (Zero-Failure Storage Fallback)
+// Image Upload Endpoint (Authenticated + Strict Magic-Byte Verification)
 // ----------------------------------------------------
-const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
-// Sur Vercel (serverless) le disque est en lecture seule : ne jamais planter au démarrage.
+const UPLOADS_DIR = isServerless ? path.join('/tmp', 'uploads') : path.join(__dirname, 'public', 'uploads');
 try {
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
 } catch (e) {
-  console.warn('Uploads dir unavailable (read-only filesystem):', (e as Error).message);
+  console.warn('[Uploads] Directory setup notice:', e);
 }
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-app.post('/api/upload-image', (req, res) => {
+app.post('/api/upload-image', async (req, res) => {
   try {
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise pour téléverser une image.' });
+    }
+
     const { dataUrl, filename } = req.body;
     if (!dataUrl || typeof dataUrl !== 'string') {
       return res.status(400).json({ success: false, message: 'Image manquante ou invalide.' });
     }
 
-    const matches = dataUrl.match(/^data:image\/([a-zA-Z0-9\+\-\.]+);base64,(.+)$/s);
+    const matches = dataUrl.match(/^data:image\/(jpeg|jpg|png|webp|gif|avif);base64,([A-Za-z0-9+/=\s]+)$/i);
     if (!matches) {
-      return res.status(400).json({ success: false, message: 'Format dataUrl invalide.' });
+      return res.status(400).json({ success: false, message: 'Format dataUrl non autorisé (JPEG, PNG, WebP, GIF, AVIF uniquement).' });
     }
 
-    let ext = matches[1].toLowerCase();
-    if (ext === 'jpeg') ext = 'jpg';
-    if (ext.includes('svg')) ext = 'svg';
-    if (ext.includes('webp')) ext = 'webp';
-    if (ext.includes('png')) ext = 'png';
-
-    const base64Data = matches[2];
+    const base64Data = matches[2].replace(/\s+/g, '');
     const buffer = Buffer.from(base64Data, 'base64');
+    if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: 'Taille d’image invalide (max 5 Mo).' });
+    }
 
-    const cleanFilename = (filename && typeof filename === 'string')
-      ? filename.replace(/[^a-zA-Z0-9_\-\.]/g, '')
-      : `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    const magicCheck = hasValidImageMagicBytes(new Uint8Array(buffer.subarray(0, 16)));
+    if (!magicCheck.valid) {
+      return res.status(400).json({ success: false, message: 'Signature binaire d’image invalide.' });
+    }
+
+    const extMap: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/heic-avif': 'avif',
+    };
+    const safeExt = extMap[magicCheck.detectedType || ''] || 'webp';
+
+    const safeBase = (filename && typeof filename === 'string')
+      ? path.basename(filename).replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 40)
+      : `${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+    const cleanFilename = `${authUser.id.slice(0, 8)}_${safeBase}.${safeExt}`;
 
     const filePath = path.join(UPLOADS_DIR, cleanFilename);
     fs.writeFileSync(filePath, buffer);
@@ -1020,7 +1304,6 @@ app.post('/api/upload-image', (req, res) => {
 // ----------------------------------------------------
 // Cryptographic & database-verified Admin authorization
 async function verifyAdminAuth(req: express.Request): Promise<boolean> {
-  const authHeader = req.headers.authorization;
   const adminKey = req.headers['x-admin-key'] as string;
 
   // 1. Secret key verification (if configured in environment)
@@ -1030,25 +1313,15 @@ async function verifyAdminAuth(req: express.Request): Promise<boolean> {
   }
 
   // 2. Cryptographic JWT Bearer token verification via Supabase Auth
-  if (authHeader && authHeader.startsWith('Bearer ') && supabaseAdmin) {
-    const token = authHeader.substring(7).trim();
-    try {
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-      if (user && !error) {
-        const isMarcArnaud =
-          user.id === 'd2882463-6bcf-414a-8844-6c06279e50e0' ||
-          (user.email && user.email.toLowerCase() === 'marcarnaudkonan2@gmail.com') ||
-          (user.phone && user.phone.replace(/[^\d]/g, '').includes('2250565242349'));
-        if (isMarcArnaud) return true;
-      }
-    } catch {
-      // Invalid JWT
-    }
+  const user = await verifyRequestSupabaseUser(req);
+  if (user) {
+    const isMarcArnaud =
+      user.id === 'd2882463-6bcf-414a-8844-6c06279e50e0' ||
+      (user.email && user.email.toLowerCase() === 'marcarnaudkonan2@gmail.com') ||
+      (user.phone && user.phone.replace(/[^\d]/g, '').includes('2250565242349'));
+    if (isMarcArnaud) return true;
   }
 
-  // SÉCURITÉ : l'ancienne vérification par en-tête « x-admin-id » a été supprimée.
-  // Elle acceptait n'importe quel appelant qui envoyait l'ID de l'admin (public),
-  // sans aucune preuve d'identité. Seuls la clé secrète et le JWT Supabase vérifié comptent.
   return false;
 }
 
@@ -1235,9 +1508,17 @@ app.get('/api/social/reactions/:postId', (req, res) => {
 
 app.post('/api/social/reactions', async (req, res) => {
   try {
-    const { postId, userId, reactionType, userInfo } = req.body;
-    if (!postId || !userId || !reactionType) {
-      return res.status(400).json({ success: false, message: 'postId, userId et reactionType requis' });
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise pour réagir.' });
+    }
+
+    const { postId, userId, reactionType, userInfo } = req.body || {};
+    if (!postId || !reactionType) {
+      return res.status(400).json({ success: false, message: 'postId et reactionType requis' });
+    }
+    if (userId && userId !== authUser.id) {
+      return res.status(403).json({ success: false, message: 'Identifiant utilisateur non concordant.' });
     }
 
     const validTypes: ReactionType[] = ['like', 'love', 'haha', 'wow', 'sad', 'angry'];
@@ -1245,7 +1526,7 @@ app.post('/api/social/reactions', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Type de réaction invalide' });
     }
 
-    const result = await setOrToggleReaction(postId, userId, reactionType, userInfo);
+    const result = await setOrToggleReaction(postId, authUser.id, reactionType, userInfo);
     res.json({ success: true, ...result });
   } catch (err: any) {
     console.error('Error setting reaction:', err);
@@ -1253,14 +1534,22 @@ app.post('/api/social/reactions', async (req, res) => {
   }
 });
 
-app.post('/api/social/shares', (req, res) => {
+app.post('/api/social/shares', async (req, res) => {
   try {
-    const { postId, userId, shareType, commentary, createdPostId } = req.body;
-    if (!postId || !userId || !shareType) {
-      return res.status(400).json({ success: false, message: 'postId, userId et shareType requis' });
+    const authUser = await verifyRequestSupabaseUser(req);
+    if (!authUser) {
+      return res.status(401).json({ success: false, message: 'Authentification requise pour enregistrer un partage.' });
     }
 
-    const result = recordShareEvent(postId, userId, shareType, commentary, createdPostId);
+    const { postId, userId, shareType, commentary, createdPostId } = req.body || {};
+    if (!postId || !shareType) {
+      return res.status(400).json({ success: false, message: 'postId et shareType requis' });
+    }
+    if (userId && userId !== authUser.id) {
+      return res.status(403).json({ success: false, message: 'Identifiant utilisateur non concordant.' });
+    }
+
+    const result = recordShareEvent(postId, authUser.id, shareType, commentary, createdPostId);
     res.json({ success: true, ...result });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -1270,9 +1559,6 @@ app.post('/api/social/shares', (req, res) => {
 // ----------------------------------------------------
 // App Version & Deployment Update Detection Endpoint
 // ----------------------------------------------------
-const SERVER_START_TIME = Date.now();
-const APP_VERSION = '3.0.0';
-
 app.get('/api/app-version', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -1280,9 +1566,36 @@ app.get('/api/app-version', (_req, res) => {
   res.json({
     success: true,
     version: APP_VERSION,
+    commitSha: COMMIT_SHA,
     buildTimestamp: SERVER_START_TIME,
     timestamp: Date.now(),
   });
+});
+
+// Return clean JSON 404 for unknown /api/* routes (never HTML fallback)
+app.all('/api/*', (_req, res) => {
+  res.status(404).json({ success: false, message: 'Route API introuvable.' });
+});
+
+// Global JSON error handler (catches malformed JSON SyntaxError, entity.too.large, etc.)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = Number(err?.status || err?.statusCode || 500);
+  if (err?.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+    return res.status(400).json({ success: false, message: 'Corps JSON invalide.' });
+  }
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'Fichier ou requête trop volumineuse (max 25 Mo).' });
+  }
+  if (req.path.startsWith('/api/') || req.path === '/healthz') {
+    return res.status(status >= 400 ? status : 500).json({
+      success: false,
+      message: err?.message || 'Erreur interne du serveur.',
+    });
+  }
+  return res.status(status >= 400 ? status : 500).send('Erreur interne du serveur.');
 });
 
 // Serve static public assets (manifests, icons, offline.html, sw.js)
@@ -1307,15 +1620,45 @@ async function startServer() {
   // Automatic Facebook Hourly Scheduler is disabled per user request (Manual import only)
   // startFacebookHourlyScheduler();
 
-  app.listen(port, () => {
-    console.log(`[Afrique Business] Server active at http://localhost:${port}`);
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(
+      JSON.stringify({
+        event: 'server_started',
+        service: 'afrique-business',
+        version: APP_VERSION,
+        commitSha: COMMIT_SHA,
+        port,
+        env: process.env.NODE_ENV || 'development',
+        region: process.env.CLOUD_RUN_REGION || 'europe-west2',
+        supabaseConfigured: Boolean(supabaseUrl && supabaseAnonKey),
+        serviceRoleConfigured: Boolean(serviceRoleKey),
+        smsConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
+        emailConfigured: Boolean(process.env.RESEND_API_KEY),
+      })
+    );
   });
+
+  const gracefulShutdown = (signal: string) => {
+    console.log(JSON.stringify({ event: 'shutdown_initiated', signal }));
+    server.close(() => {
+      console.log(JSON.stringify({ event: 'shutdown_complete', signal }));
+      process.exit(0);
+    });
+    setTimeout(() => {
+      process.exit(0);
+    }, 10000).unref();
+  };
+
+  process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.once('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  return server;
 }
 
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && process.env.DISABLE_AUTO_START !== 'true') {
   startServer();
 }
 
-export { app };
+export { app, startServer };
 export default app;
 

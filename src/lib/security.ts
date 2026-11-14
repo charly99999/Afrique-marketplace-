@@ -107,3 +107,105 @@ export function isValidEmail(email?: string | null): boolean {
   if (trimmed.length > 254) return false;
   return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(trimmed);
 }
+
+/**
+ * Inspects binary magic bytes to ensure uploaded buffers are real raster images
+ * (JPEG, PNG, GIF, WebP, BMP, HEIC/AVIF) and not HTML/SVG/scripts masquerading as images.
+ */
+export function hasValidImageMagicBytes(bytes: Uint8Array): { valid: boolean; detectedType?: string } {
+  if (!bytes || bytes.length < 4) {
+    return { valid: false };
+  }
+
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { valid: true, detectedType: 'image/jpeg' };
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return { valid: true, detectedType: 'image/png' };
+  }
+
+  // GIF87a / GIF89a: 47 49 46 38
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return { valid: true, detectedType: 'image/gif' };
+  }
+
+  // WebP: RIFF....WEBP
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return { valid: true, detectedType: 'image/webp' };
+  }
+
+  // BMP: 42 4D
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return { valid: true, detectedType: 'image/bmp' };
+  }
+
+  // ISO BMFF (AVIF / HEIC): ....ftyp
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  ) {
+    return { valid: true, detectedType: 'image/heic-avif' };
+  }
+
+  return { valid: false };
+}
+
+export async function validateImageFileSignature(
+  file: Blob,
+  maxInputBytes = 15 * 1024 * 1024
+): Promise<{ valid: boolean; detectedType?: string; reason?: string }> {
+  if (!file || file.size === 0) {
+    return { valid: false, reason: 'Le fichier image est vide.' };
+  }
+  if (file.size > maxInputBytes) {
+    const mb = Math.round(maxInputBytes / (1024 * 1024));
+    return { valid: false, reason: `Image trop volumineuse (maximum ${mb} Mo).` };
+  }
+
+  const declared = (file.type || '').toLowerCase();
+  if (declared === 'image/svg+xml' || declared.includes('svg')) {
+    return { valid: false, reason: 'Les fichiers SVG ne sont pas autorisés pour les photos.' };
+  }
+
+  try {
+    const headerBuffer = await file.slice(0, 16).arrayBuffer();
+    const bytes = new Uint8Array(headerBuffer);
+    const sig = hasValidImageMagicBytes(bytes);
+    if (!sig.valid) {
+      return {
+        valid: false,
+        reason: 'Format d’image non reconnu ou corrompu (JPEG, PNG, WebP, GIF, HEIC/AVIF uniquement).',
+      };
+    }
+    return sig;
+  } catch {
+    return { valid: false, reason: 'Impossible de lire l’en-tête du fichier image.' };
+  }
+}
+

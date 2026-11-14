@@ -1,15 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CountryCode, Listing } from '../types';
 import { AFRICAN_COUNTRIES, CITIES_BY_COUNTRY } from '../data/countries';
-import { uploadWebpImage, ListingCondition, isValidUuid, getAccountPhone } from '../lib/supabaseData';
-import { supabase } from '../lib/supabase';
+import { uploadWebpImage, deleteOwnStoragePhoto, ListingCondition, getAccountPhone } from '../lib/supabaseData';
 import { CategoryKey, getCategoryItem, CategoryGoldIcon } from '../data/categories';
 import { CategorySelectModal } from './CategorySelectModal';
-import { 
-  Camera, Check, AlertCircle, 
+import {
+  Camera, Check, AlertCircle,
   Trash2, ArrowLeft, Image as ImageIcon,
-  Phone, MessageSquare, MapPin, Tag, ChevronRight, User, Search
+  Phone, MessageSquare, MapPin, Tag, ChevronRight, User, RefreshCw
 } from 'lucide-react';
+import { SafeImage } from './SafeImage';
+
+function generateDraftUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 export interface PublishViewProps {
   currentCountry: CountryCode;
@@ -86,8 +97,12 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
   // Photos (up to 8)
   const [photos, setPhotos] = useState<string[]>(editingListing?.images || []);
+  const [newlyUploadedPhotos, setNewlyUploadedPhotos] = useState<Set<string>>(new Set());
+  const [draftUuid, setDraftUuid] = useState<string>(() => editingListing?.id || generateDraftUuid());
   const [isCompressing, setIsCompressing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [compressionMsg, setCompressionMsg] = useState<string | null>(null);
+  const [failedUploads, setFailedUploads] = useState<{ file: File; error: string }[]>([]);
 
   // Form validation & status
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -155,7 +170,11 @@ export const PublishView: React.FC<PublishViewProps> = ({
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
+    const selectedFiles = e.target.files ? Array.from(e.target.files) : [];
+    // Always reset input so selecting the same photo again triggers onChange
+    e.target.value = '';
+    if (selectedFiles.length === 0) return;
+
     setErrorMessage(null);
 
     if (!currentUser) {
@@ -169,33 +188,98 @@ export const PublishView: React.FC<PublishViewProps> = ({
       return;
     }
 
-    const files = Array.from(e.target.files).slice(0, availableSlots);
+    const files = selectedFiles.slice(0, availableSlots);
     setIsCompressing(true);
-    setCompressionMsg('Compression WebP en cours (haute résolution, optimisée pour connexions mobiles)...');
+    setUploadProgress(5);
+    setCompressionMsg(`Compression WebP & envoi de ${files.length} photo(s) en cours...`);
 
     const uploadedUrls: string[] = [];
+    const newFailures: { file: File; error: string }[] = [];
     const userId = currentUser.id;
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       try {
-        const url = await uploadWebpImage('listings', userId, file);
+        const url = await uploadWebpImage('listings', userId, file, undefined, (pct) => {
+          const overall = Math.round(((i + pct / 100) / files.length) * 100);
+          setUploadProgress(overall);
+        });
         uploadedUrls.push(url);
       } catch (err: any) {
         console.error('Error uploading photo:', err);
-        setErrorMessage(err.message || 'Échec du téléversement de la photo.');
+        const reason = err?.message || 'Échec du téléversement.';
+        newFailures.push({ file, error: reason });
+        setErrorMessage(reason);
       }
+    }
+
+    if (newFailures.length > 0) {
+      setFailedUploads((prev) => [...prev, ...newFailures]);
     }
 
     if (uploadedUrls.length > 0) {
       setPhotos((prev) => [...prev, ...uploadedUrls]);
+      setNewlyUploadedPhotos((prev) => {
+        const next = new Set(prev);
+        uploadedUrls.forEach((u) => next.add(u));
+        return next;
+      });
       setCompressionMsg(`✓ ${uploadedUrls.length} photo(s) ajoutée(s) et compressée(s) en WebP.`);
       setTimeout(() => setCompressionMsg(null), 3500);
+    } else {
+      setCompressionMsg(null);
     }
+    setUploadProgress(null);
     setIsCompressing(false);
   };
 
+  const handleRetryFailedUpload = async (failedIdx: number) => {
+    if (!currentUser) {
+      onRequireAuth();
+      return;
+    }
+    if (photos.length >= 8) {
+      setErrorMessage('Vous avez atteint le maximum de 8 photos par annonce.');
+      return;
+    }
+    const target = failedUploads[failedIdx];
+    if (!target) return;
+
+    setErrorMessage(null);
+    setIsCompressing(true);
+    setUploadProgress(15);
+    try {
+      const url = await uploadWebpImage('listings', currentUser.id, target.file, undefined, (pct) => {
+        setUploadProgress(pct);
+      });
+      setPhotos((prev) => [...prev, url]);
+      setNewlyUploadedPhotos((prev) => new Set(prev).add(url));
+      setFailedUploads((prev) => prev.filter((_, idx) => idx !== failedIdx));
+      setCompressionMsg('✓ Photo ajoutée avec succès.');
+      setTimeout(() => setCompressionMsg(null), 3000);
+    } catch (err: any) {
+      const reason = err?.message || 'Échec du téléversement.';
+      setFailedUploads((prev) =>
+        prev.map((item, idx) => (idx === failedIdx ? { ...item, error: reason } : item))
+      );
+      setErrorMessage(reason);
+    } finally {
+      setUploadProgress(null);
+      setIsCompressing(false);
+    }
+  };
+
   const handleRemovePhoto = (index: number) => {
+    const removedUrl = photos[index];
     setPhotos((prev) => prev.filter((_, i) => i !== index));
+    if (removedUrl && newlyUploadedPhotos.has(removedUrl) && currentUser?.id) {
+      deleteOwnStoragePhoto('listings', currentUser.id, removedUrl).catch(() => {});
+      setNewlyUploadedPhotos((prev) => {
+        const next = new Set(prev);
+        next.delete(removedUrl);
+        return next;
+      });
+    }
   };
 
   const handleMovePhoto = (index: number, direction: 'up' | 'down') => {
@@ -209,6 +293,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || isCompressing) return;
     setErrorMessage(null);
 
     if (!currentUser) {
@@ -260,7 +345,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
         : city.trim();
 
       const listingData: Listing = {
-        id: editingListing?.id || `lst_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        id: editingListing?.id || draftUuid,
         title: title.trim(),
         description: description.trim() || title.trim(),
         price: Number(price),
@@ -291,6 +376,10 @@ export const PublishView: React.FC<PublishViewProps> = ({
       };
 
       await onPublishSuccess(listingData, isEditing);
+      setNewlyUploadedPhotos(new Set());
+      if (!isEditing) {
+        setDraftUuid(generateDraftUuid());
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Une erreur est survenue lors de l’enregistrement de l’annonce.');
     } finally {
@@ -360,6 +449,57 @@ export const PublishView: React.FC<PublishViewProps> = ({
             </label>
           </div>
 
+          {/* Upload Progress Bar */}
+          {uploadProgress !== null && (
+            <div className="mt-2.5 space-y-1">
+              <div className="w-full h-2 rounded-full bg-[#F1F4F9] overflow-hidden border border-[#E5E8EF]">
+                <div
+                  className="h-full bg-linear-to-r from-[#C69A35] to-[#E7C875] transition-all duration-200"
+                  style={{ width: `${Math.min(100, Math.max(5, uploadProgress))}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-semibold text-[#596273] block text-right tabular-nums">
+                Envoi en cours : {uploadProgress}%
+              </span>
+            </div>
+          )}
+
+          {/* Failed Uploads with per-file retry */}
+          {failedUploads.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {failedUploads.map((item, idx) => (
+                <div
+                  key={`${item.file.name}_${idx}`}
+                  className="p-2.5 rounded-xl bg-red-50 border border-red-200 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-red-800 truncate">{item.file.name}</p>
+                    <p className="text-[11px] text-red-700 truncate">{item.error}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isCompressing}
+                      onClick={() => handleRetryFailedUpload(idx)}
+                      className="px-2.5 py-1.5 rounded-lg bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 cursor-pointer flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Réessayer</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFailedUploads((prev) => prev.filter((_, i) => i !== idx))}
+                      className="p-1.5 rounded-lg text-red-500 hover:text-red-700 cursor-pointer"
+                      title="Ignorer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Photos Grid */}
           {photos.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3">
@@ -368,7 +508,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
                   key={index}
                   className="relative aspect-square rounded-xl overflow-hidden border border-[#E5E8EF] bg-[#F1F4F9] group shadow-xs"
                 >
-                  <img src={photo} alt="" className="w-full h-full object-cover" />
+                  <SafeImage src={photo} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
                   
                   {index === 0 && (
                     <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-[#C69A35] text-white text-[9px] font-black shadow-sm">
@@ -437,7 +577,7 @@ export const PublishView: React.FC<PublishViewProps> = ({
 
           {/* Dedicated Category Selector Button */}
           <div>
-            <label className="text-xs font-bold text-gray-200 block mb-1">
+            <label className="text-xs font-bold text-[#172033] block mb-1">
               Catégorie de l'annonce *
             </label>
             <button

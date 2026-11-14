@@ -6,6 +6,7 @@ import {
   LogIn, Trash2
 } from 'lucide-react';
 import officialLogoImg from '../assets/images/logo_afrique_business_1792378287169.jpg';
+import { SafeAvatar } from './SafeImage';
 
 interface HeaderProps {
   currentCountry: CountryCode;
@@ -85,10 +86,16 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser ? (
               <button
                 onClick={onOpenSettingsModal}
-                className="w-8 h-8 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] flex items-center justify-center font-bold text-xs border border-[#C69A35]/40 cursor-pointer shadow-xs"
+                className="w-8 h-8 rounded-full overflow-hidden bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] flex items-center justify-center font-bold text-xs border border-[#C69A35]/40 cursor-pointer shadow-xs shrink-0"
                 title={`Connecté en tant que ${currentUser.fullName}`}
               >
-                {currentUser.firstName?.[0] || 'U'}
+                <SafeAvatar
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.fullName}
+                  initials={currentUser.firstName?.[0] || currentUser.fullName?.[0] || 'U'}
+                  className="w-full h-full object-cover"
+                  fallbackClassName="w-full h-full flex items-center justify-center font-bold text-xs text-[#172033]"
+                />
               </button>
             ) : (
               <button
@@ -137,8 +144,18 @@ export const Header: React.FC<HeaderProps> = ({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={`Rechercher un produit, véhicule, terrain, service en ${country.name}...`}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F1F4F9] border border-[#E5E8EF] text-xs text-[#172033] placeholder-[#596273] font-medium focus:bg-white focus:border-[#C69A35] focus:outline-none transition-colors"
+            className="w-full pl-10 pr-9 py-2 rounded-xl bg-[#F1F4F9] border border-[#E5E8EF] text-xs text-[#172033] placeholder-[#596273] font-medium focus:bg-white focus:border-[#C69A35] focus:outline-none transition-colors"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-[#596273] hover:text-[#172033] cursor-pointer"
+              aria-label="Effacer la recherche"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </header>
 

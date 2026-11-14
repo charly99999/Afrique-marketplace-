@@ -1,6 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { safeFetchJson } from './apiClient';
-import { storeClientOtp, verifyClientOtp, normalizePhoneDigits } from './clientAuthStore';
 
 // Guaranteed project configuration
 const defaultUrl = 'https://wlvzjhpfcvwcgyelpsnx.supabase.co';
@@ -24,8 +23,7 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
 export const isSupabaseConfigured = true;
 
 /**
- * Send SMS OTP via backend API (Twilio / Pan-African SMS Gateway)
- * With intelligent fallback to client OTP storage when backend returns 404 (e.g. Vercel static hosting)
+ * Send SMS OTP strictly via backend API (no fake client-side OTP bypass).
  */
 export async function sendSMSOTP(phone: string): Promise<{ success: boolean; message: string; simulated?: boolean; otp?: string }> {
   try {
@@ -37,51 +35,29 @@ export async function sendSMSOTP(phone: string): Promise<{ success: boolean; mes
     });
 
     if (res.ok && res.data?.success) {
-      if (res.data.otp) {
-        storeClientOtp(clean, res.data.otp);
-      }
       return res.data;
-    }
-
-    // If server returned 404 (e.g. Vercel static rewrite without serverless functions) or is unreachable:
-    // Generate secure client-side OTP code so the user is NEVER blocked!
-    if (res.isHtmlOr404 || res.status === 404 || res.status === 0 || !res.ok) {
-      const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-      storeClientOtp(clean, generatedCode);
-      console.log(`[Afrique Business SMS] Code généré pour ${clean} : ${generatedCode}`);
-      return {
-        success: true,
-        simulated: true,
-        otp: generatedCode,
-        message: `Code de confirmation SMS : ${generatedCode}`,
-      };
     }
 
     return {
       success: false,
-      message: res.data?.message || res.error || 'Erreur lors de l’envoi du SMS.',
+      message: res.data?.message || res.error || 'Service SMS temporairement indisponible. Utilisez la connexion par e-mail et mot de passe.',
     };
   } catch (error: any) {
-    const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-    storeClientOtp(phone, generatedCode);
     return {
-      success: true,
-      simulated: true,
-      otp: generatedCode,
-      message: `Code de confirmation SMS : ${generatedCode}`,
+      success: false,
+      message: error?.message || 'Impossible de joindre le serveur de vérification SMS.',
     };
   }
 }
 
 /**
- * Verify SMS OTP via backend API with offline client-side validation
+ * Verify SMS OTP strictly via backend API (no client-side bypass).
  */
 export async function verifySMSOTP(phone: string, code: string): Promise<{ success: boolean; message: string; user?: any }> {
   try {
     const cleanPhone = phone.trim();
     const cleanCode = code.trim();
 
-    // 1. Try backend API
     const res = await safeFetchJson<{ success: boolean; message: string; user?: any }>('/api/auth/verify-sms-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -92,29 +68,16 @@ export async function verifySMSOTP(phone: string, code: string): Promise<{ succe
       return res.data;
     }
 
-    // 2. If backend is 404 (static Vercel) or failed, check client-side OTP store
-    if (verifyClientOtp(cleanPhone, cleanCode)) {
-      return {
-        success: true,
-        message: 'Code vérifié avec succès.',
-      };
-    }
-
     return {
       success: false,
       message: res.data?.message || res.error || 'Code SMS incorrect ou expiré.',
     };
   } catch (error: any) {
-    if (verifyClientOtp(phone, code)) {
-      return {
-        success: true,
-        message: 'Code vérifié avec succès.',
-      };
-    }
     return {
       success: false,
-      message: error.message || 'Erreur lors de la vérification du code OTP.',
+      message: error?.message || 'Erreur lors de la vérification du code OTP.',
     };
   }
 }
+
 

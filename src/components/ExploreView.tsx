@@ -7,11 +7,14 @@ import { CATEGORIES_LIST, CategoryGoldIcon } from '../data/categories';
 import { 
   Search, Grid, ShieldCheck, ArrowUpDown, Package
 } from 'lucide-react';
+import { SafeImage } from './SafeImage';
 
 interface ExploreViewProps {
   listings: Listing[];
   currentCountry: CountryCode;
   viewerCurrency: string;
+  searchQuery?: string;
+  dataSaver?: boolean;
   onSelectListing: (listing: Listing) => void;
   onQuickSell: () => void;
 }
@@ -20,6 +23,8 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   listings,
   currentCountry,
   viewerCurrency,
+  searchQuery: externalSearchQuery = '',
+  dataSaver = false,
   onSelectListing,
   onQuickSell,
 }) => {
@@ -29,16 +34,22 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [maxPrice, setMaxPrice] = useState<number | ''>('');
   const [sortBy, setSortBy] = useState<'recent' | 'price_asc' | 'price_desc'>('recent');
+  const [visibleCount, setVisibleCount] = useState(24);
 
   const countryConfig = AFRICAN_COUNTRIES[currentCountry] || AFRICAN_COUNTRIES.CI;
+  const activeSearch = search.trim() || externalSearchQuery.trim();
+
+  React.useEffect(() => {
+    setVisibleCount(24);
+  }, [activeSearch, selectedCat, conditionFilter, verifiedOnly, maxPrice, sortBy]);
 
   const filtered = listings.filter((l) => {
     if (selectedCat !== 'ALL' && l.category !== selectedCat) return false;
     if (verifiedOnly && !l.seller?.verified) return false;
     if (conditionFilter !== 'ALL' && l.condition !== conditionFilter) return false;
     if (maxPrice && l.price > Number(maxPrice)) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    if (activeSearch) {
+      const q = activeSearch.toLowerCase();
       return (
         (l.title || '').toLowerCase().includes(q) ||
         (l.city || '').toLowerCase().includes(q) ||
@@ -187,64 +198,76 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {filtered.map((listing) => {
-            const { formatted } = convertAndFormatPrice(
-              listing.price,
-              listing.currency,
-              viewerCurrency
-            );
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+            {filtered.slice(0, visibleCount).map((listing) => {
+              const { formatted } = convertAndFormatPrice(
+                listing.price,
+                listing.currency,
+                viewerCurrency
+              );
 
-            return (
-              <div
-                key={listing.id}
-                onClick={() => onSelectListing(listing)}
-                className="rounded-2xl bg-white border border-[#E5E8EF] hover:border-[#C69A35]/50 overflow-hidden flex flex-col shadow-xs hover:shadow-md transition-all cursor-pointer group"
-              >
-                <div className="relative aspect-4/3 w-full bg-[#F1F4F9] overflow-hidden">
-                  <img
-                    src={listing.images[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'}
-                    alt={listing.title}
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-                    }}
-                    className="w-full h-full object-cover group-hover:scale-104 transition-transform duration-300"
-                  />
-                  <div className="absolute top-2 left-2">
-                    <span className="px-2 py-0.5 rounded-full bg-white/95 backdrop-blur-xs text-[#C69A35] border border-[#C69A35]/30 text-[9px] font-bold shadow-xs">
-                      {listing.condition === 'neuf' ? 'Neuf' : 'Occasion'}
-                    </span>
-                  </div>
-                  <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-md text-xs font-bold border border-[#E5E8EF] shadow-xs">
-                    {AFRICAN_COUNTRIES[listing.country]?.flag || countryConfig.flag}
-                  </div>
-                </div>
-
-                <div className="p-3.5 flex-1 flex flex-col justify-between space-y-2">
-                  <div>
-                    <span className="text-base font-black text-[#C69A35] tabular-nums block mb-1">
-                      {formatted}
-                    </span>
-                    <h4 className="text-xs font-bold text-[#172033] line-clamp-2 leading-snug group-hover:text-[#C69A35] transition-colors">
-                      {listing.title}
-                    </h4>
-                  </div>
-
-                  <div className="pt-2 border-t border-[#E5E8EF] flex items-center justify-between text-[11px] text-[#596273]">
-                    <span className="truncate">{listing.city}</span>
-                    {listing.seller?.verified && (
-                      <span className="flex items-center gap-1 text-[#C69A35] font-bold text-[10px]">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>Vérifié</span>
+              return (
+                <div
+                  key={listing.id}
+                  onClick={() => onSelectListing(listing)}
+                  className="rounded-2xl bg-white border border-[#E5E8EF] hover:border-[#C69A35]/50 overflow-hidden flex flex-col shadow-xs hover:shadow-md transition-all cursor-pointer group"
+                >
+                  <div className="relative aspect-4/3 w-full bg-[#F1F4F9] overflow-hidden">
+                    <SafeImage
+                      src={dataSaver ? undefined : listing.images[0]}
+                      alt={listing.title}
+                      loading="lazy"
+                      fallbackLabel={dataSaver && listing.images[0] ? 'Aperçu allégé (Économie)' : 'Photo indisponible'}
+                      className="w-full h-full object-cover group-hover:scale-104 transition-transform duration-300"
+                    />
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 rounded-full bg-white/95 backdrop-blur-xs text-[#C69A35] border border-[#C69A35]/30 text-[9px] font-bold shadow-xs">
+                        {listing.condition === 'neuf' ? 'Neuf' : 'Occasion'}
                       </span>
-                    )}
+                    </div>
+                    <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-md text-xs font-bold border border-[#E5E8EF] shadow-xs">
+                      {AFRICAN_COUNTRIES[listing.country]?.flag || countryConfig.flag}
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 flex-1 flex flex-col justify-between space-y-2">
+                    <div>
+                      <span className="text-base font-black text-[#C69A35] tabular-nums block mb-1">
+                        {formatted}
+                      </span>
+                      <h4 className="text-xs font-bold text-[#172033] line-clamp-2 leading-snug group-hover:text-[#C69A35] transition-colors">
+                        {listing.title}
+                      </h4>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#E5E8EF] flex items-center justify-between text-[11px] text-[#596273]">
+                      <span className="truncate">{listing.city}</span>
+                      {listing.seller?.verified && (
+                        <span className="flex items-center gap-1 text-[#C69A35] font-bold text-[10px]">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Vérifié</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+
+          {filtered.length > visibleCount && (
+            <div className="pt-6 text-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => prev + 24)}
+                className="px-6 py-3 rounded-xl bg-white hover:bg-[#F8F9FC] text-[#172033] text-xs font-bold border border-[#E5E8EF] transition-colors cursor-pointer min-h-[44px] shadow-xs"
+              >
+                Afficher plus d&apos;annonces ({filtered.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'afrique-business-shell-v2.5';
+const CACHE_NAME = 'afrique-business-shell-v3.0.0';
 const OFFLINE_URL = '/offline.html';
 
 const APP_SHELL_ASSETS = [

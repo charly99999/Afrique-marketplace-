@@ -134,6 +134,10 @@ export function markNotificationsAsRead(): void {
   localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated));
 }
 
+export function clearStoredNotifications(): void {
+  localStorage.removeItem(NOTIFICATIONS_KEY);
+}
+
 // Conversations Store
 export function getStoredConversations(): ChatConversation[] {
   try {

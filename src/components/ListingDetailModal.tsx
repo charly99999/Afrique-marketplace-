@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Listing, CountryCode } from '../types';
 import { convertAndFormatPrice } from '../lib/currency';
-import { rpcGetContactPhone, submitReport, toggleFavorite, getFavoriteListingIds } from '../lib/supabaseData';
+import { rpcGetContactPhone, submitReport, toggleFavorite, getFavoriteListingIds, downloadImageSafely } from '../lib/supabaseData';
 import { AFRICAN_COUNTRIES } from '../data/countries';
 import { getCategoryItem, CategoryGoldIcon } from '../data/categories';
-import { 
-  X, ShieldCheck, Phone, MessageSquare, Share2, 
-  MapPin, Heart, Flag, Edit, CheckCircle, PauseCircle, 
-  PlayCircle, Trash2, Maximize2, Tag, Calendar, ExternalLink, Mail
+import { appConfirm, appToast } from '../lib/feedback';
+import { LISTING_PLACEHOLDER_SVG, SafeImage, SafeAvatar } from './SafeImage';
+import {
+  X, ShieldCheck, Phone, MessageSquare, Share2,
+  MapPin, Heart, Flag, Edit, CheckCircle, PauseCircle,
+  PlayCircle, Trash2, Maximize2, Calendar, ExternalLink, Mail,
+  ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 
 interface ListingDetailModalProps {
@@ -128,11 +131,14 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     chats_enabled: true,
   };
 
-  const isOwner = Boolean(currentUserId && seller.id && seller.id === currentUserId);
+  const isOwner = Boolean(
+    currentUserId &&
+      (listing.user_id === currentUserId || (seller.id && seller.id === currentUserId))
+  );
   const countryConfig = AFRICAN_COUNTRIES[(listing.country || 'CI') as CountryCode] || AFRICAN_COUNTRIES.CI;
   const images = (Array.isArray(listing.images) && listing.images.length > 0)
     ? listing.images.filter((img) => typeof img === 'string' && img.trim().length > 0)
-    : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'];
+    : [LISTING_PLACEHOLDER_SVG];
 
   const safePrice = Number(listing.price) || 0;
   const safeCurrency = listing.currency || 'FCFA';
@@ -152,8 +158,24 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       onRequireAuth?.();
       return;
     }
-    const newStatus = await toggleFavorite(currentUserId, listing.id);
-    setIsFav(newStatus);
+    try {
+      const newStatus = await toggleFavorite(currentUserId, listing.id);
+      setIsFav(newStatus);
+    } catch (err: any) {
+      appToast(err?.message || 'Impossible de mettre à jour vos favoris.', 'error');
+    }
+  };
+
+  const handleDownloadCurrentPhoto = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = images[selectedImageIdx];
+    if (!url) return;
+    try {
+      await downloadImageSafely(url, `${listing.title}-${selectedImageIdx + 1}`);
+      appToast('Photo téléchargée.', 'success');
+    } catch (err: any) {
+      appToast(err?.message || 'Téléchargement impossible pour cette image.', 'error');
+    }
   };
 
   const handleShare = () => {
@@ -164,10 +186,15 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         text,
         url: directAdUrl,
       }).catch(() => {});
+    } else if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2500);
+      }).catch(() => {
+        appToast("Copie automatique bloquée par le navigateur.", 'error');
+      });
     } else {
-      navigator.clipboard.writeText(text);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2500);
+      appToast("Partage non supporté sur ce navigateur.", 'info');
     }
   };
 
@@ -209,18 +236,22 @@ Est-elle toujours disponible ?`;
       onRequireAuth?.();
       return;
     }
-    await submitReport({
-      reporter_id: currentUserId,
-      target_type: 'listing',
-      target_id: listing.id,
-      reason: reportReason,
-      details: reportDetails,
-    });
-    setReportSubmitted(true);
-    setTimeout(() => {
-      setShowReportModal(false);
-      setReportSubmitted(false);
-    }, 2000);
+    try {
+      await submitReport({
+        reporter_id: currentUserId,
+        target_type: 'listing',
+        target_id: listing.id,
+        reason: reportReason,
+        details: reportDetails,
+      });
+      setReportSubmitted(true);
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportSubmitted(false);
+      }, 2000);
+    } catch (err: any) {
+      appToast(err?.message || 'Impossible d’envoyer le signalement.', 'error');
+    }
   };
 
   const sellerInitials = seller.name
@@ -287,12 +318,10 @@ Est-elle toujours disponible ?`;
           <div className="flex-1 overflow-y-auto">
             {/* Photo Gallery */}
             <div className="relative bg-black w-full aspect-4/3 sm:aspect-16/9 flex items-center justify-center overflow-hidden group">
-              <img
+              <SafeImage
                 src={images[selectedImageIdx]}
                 alt={listing.title}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-                }}
+                loading="eager"
                 className="w-full h-full object-contain cursor-zoom-in"
                 onClick={() => setIsFullscreenPhoto(true)}
               />
@@ -314,14 +343,58 @@ Est-elle toujours disponible ?`;
                 </span>
               </div>
 
-              {/* Fullscreen Button */}
-              <button
-                onClick={() => setIsFullscreenPhoto(true)}
-                className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/90 transition-colors cursor-pointer"
-                title="Plein écran"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
+              {/* Gallery Prev/Next arrows & counter */}
+              {images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImageIdx((prev) => (prev - 1 + images.length) % images.length);
+                    }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-black/85 transition-colors cursor-pointer"
+                    title="Photo précédente"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImageIdx((prev) => (prev + 1) % images.length);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-black/85 transition-colors cursor-pointer"
+                    title="Photo suivante"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+
+              {/* Download & Fullscreen Buttons */}
+              <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                {images.length > 1 && (
+                  <span className="px-2 py-1 rounded-lg bg-black/65 text-white text-[11px] font-bold tabular-nums">
+                    {selectedImageIdx + 1} / {images.length}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDownloadCurrentPhoto}
+                  className="p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/90 transition-colors cursor-pointer"
+                  title="Télécharger la photo"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreenPhoto(true)}
+                  className="p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/90 transition-colors cursor-pointer"
+                  title="Plein écran"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+              </div>
 
               {/* Thumbnails */}
               {images.length > 1 && (
@@ -334,7 +407,7 @@ Est-elle toujours disponible ?`;
                         selectedImageIdx === idx ? 'border-[#D4AF37] scale-105' : 'border-white/40 opacity-70'
                       }`}
                     >
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                      <SafeImage src={img} alt={`Miniature ${idx + 1}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>
@@ -426,17 +499,13 @@ Est-elle toujours disponible ?`;
               {/* Seller Profile Card */}
               <div className="p-3.5 rounded-xl bg-[#F8F9FC] border border-[#E5E8EF] flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {(seller.avatarUrl || seller.avatar_url) ? (
-                    <img
-                      src={seller.avatarUrl || seller.avatar_url}
-                      alt={seller.name}
-                      className="w-12 h-12 rounded-full object-cover border border-[#E5E8EF] bg-white"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold flex items-center justify-center text-sm shadow-xs">
-                      {sellerInitials}
-                    </div>
-                  )}
+                  <SafeAvatar
+                    src={seller.avatarUrl || seller.avatar_url}
+                    alt={seller.name}
+                    initials={sellerInitials}
+                    className="w-12 h-12 rounded-full object-cover border border-[#E5E8EF] bg-white"
+                    fallbackClassName="w-12 h-12 rounded-full bg-linear-to-tr from-[#C69A35] to-[#E7C875] text-[#172033] font-bold flex items-center justify-center text-sm shadow-xs"
+                  />
 
                   <div>
                     <h4 className="text-sm font-bold text-[#172033] flex items-center gap-1.5">
@@ -538,8 +607,15 @@ Est-elle toujours disponible ?`;
                     </button>
 
                     <button
-                      onClick={() => {
-                        if (confirm('Voulez-vous vraiment supprimer définitivement cette annonce ?')) {
+                      onClick={async () => {
+                        const confirmed = await appConfirm({
+                          title: 'Supprimer cette annonce ?',
+                          message: 'Voulez-vous vraiment supprimer définitivement cette annonce ?',
+                          confirmText: 'Supprimer',
+                          cancelText: 'Annuler',
+                          danger: true,
+                        });
+                        if (confirmed) {
                           onDeleteListing?.(listing.id);
                           onClose();
                         }
@@ -649,19 +725,66 @@ Est-elle toujours disponible ?`;
           onClick={() => setIsFullscreenPhoto(false)}
           className="fixed inset-0 z-60 bg-black/95 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in"
         >
-          <button
-            onClick={() => setIsFullscreenPhoto(false)}
-            className="absolute top-4 right-4 p-2 rounded-full bg-zinc-800 text-white"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <img
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+            {images.length > 1 && (
+              <span className="px-2.5 py-1 rounded-full bg-zinc-800 text-white text-xs font-bold tabular-nums">
+                {selectedImageIdx + 1} / {images.length}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleDownloadCurrentPhoto}
+              className="p-2 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white cursor-pointer"
+              title="Télécharger la photo"
+            >
+              <Download className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsFullscreenPhoto(false);
+              }}
+              className="p-2 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white cursor-pointer"
+              title="Fermer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedImageIdx((prev) => (prev - 1 + images.length) % images.length);
+                }}
+                className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-white cursor-pointer z-10"
+                title="Photo précédente"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedImageIdx((prev) => (prev + 1) % images.length);
+                }}
+                className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-white cursor-pointer z-10"
+                title="Photo suivante"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
+
+          <SafeImage
             src={images[selectedImageIdx]}
             alt={listing.title}
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-            }}
-            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            loading="eager"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-[90vh] object-contain rounded-lg cursor-default"
           />
         </div>
       )}

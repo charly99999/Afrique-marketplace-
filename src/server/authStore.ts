@@ -21,7 +21,8 @@ interface CredentialsStore {
   users: Record<string, UserCredential>; // userId -> UserCredential
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'user_credentials.json');
 
 // Supabase client with anon key
@@ -229,11 +230,12 @@ export function verifyUserLogin(identifier: string, password: string): {
     return { success: false, message: 'Identifiant introuvable. Veuillez vérifier ou créer un compte.' };
   }
 
-  // If passwordHash is not yet set (e.g. freshly seeded Marc Arnaud account),
-  // lock in the entered password on first successful attempt so it works permanently!
+  // Security: never lock-in an empty passwordHash automatically on login
   if (!user.passwordHash) {
-    setUserPassword(user.userId, password);
-    return { success: true, user };
+    return {
+      success: false,
+      message: 'Mot de passe non configuré localement. Utilisez vos identifiants Supabase ou réinitialisez votre mot de passe.',
+    };
   }
 
   if (verifyPassword(password, user.passwordHash)) {

@@ -1,8 +1,15 @@
 {
   "version": 2,
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/uploads/(.*)",
       "destination": "/api/index.ts"
     },
     {

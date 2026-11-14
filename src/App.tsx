@@ -14,16 +14,18 @@ import { AuthModal } from './components/AuthModal';
 import { SettingsModal } from './components/SettingsModal';
 import { TermsModal } from './components/TermsModal';
 import { PWAUpdateToast } from './components/PWAUpdateToast';
+import { FeedbackHost } from './components/FeedbackHost';
+import { appToast } from './lib/feedback';
 
 import { Listing, CountryCode, StoredUser, AppNotification } from './types';
 import { 
   getCurrentUser, setCurrentUser, getStoredNotifications, 
-  addNotification, markNotificationsAsRead, isValidUuid, getStoredListings
+  addNotification, markNotificationsAsRead, clearStoredNotifications, isValidUuid, getStoredListings
 } from './lib/storage';
 import { supabase } from './lib/supabase';
 import { 
-  fetchListings, createListing, updateListing, deleteListing, 
-  rpcStartConversation, getProfile, subscribeToRealtime, getAccountPhone
+  fetchListings, createListing, updateListing, deleteListing, deleteOwnStoragePhoto,
+  rpcStartConversation, getProfile, subscribeToRealtime, getAccountPhone, fetchUnreadMessagesTotal
 } from './lib/supabaseData';
 import { AFRICAN_COUNTRIES } from './data/countries';
 import { MessageSquare, ShoppingBag } from 'lucide-react';
@@ -60,6 +62,7 @@ export default function App() {
 
   // Real Listings Store
   const [listings, setListings] = useState<Listing[]>([]);
+  const [listingsError, setListingsError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>(getStoredNotifications());
   const [unreadMessagesTotal, setUnreadMessagesTotal] = useState(0);
 
@@ -88,24 +91,34 @@ export default function App() {
       setShowAuthModal(true);
     }
 
-    // 1. Check existing session on boot
+    // 1. Check existing session on boot (never keep zombie localStorage user if JWT is absent)
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const profile = await getProfile(session.user.id);
-        const fullName = profile?.full_name || session.user.user_metadata?.full_name || 'Utilisateur';
+      let activeSession = session;
+      if (!activeSession?.user) {
+        try {
+          const { data: refreshData } = await supabase.auth.refreshSession();
+          activeSession = refreshData?.session || null;
+        } catch {
+          activeSession = null;
+        }
+      }
+
+      if (activeSession?.user) {
+        const profile = await getProfile(activeSession.user.id);
+        const fullName = profile?.full_name || activeSession.user.user_metadata?.full_name || 'Utilisateur';
         const nameParts = fullName.split(' ');
-        const privPhone = await getAccountPhone(session.user.id);
-        const cleanEmail = (session.user.email && !session.user.email.includes('@afrique-business.internal') && !session.user.email.includes('@afrique-business.app'))
-          ? session.user.email
+        const privPhone = await getAccountPhone(activeSession.user.id);
+        const cleanEmail = (activeSession.user.email && !activeSession.user.email.includes('@afrique-business.internal') && !activeSession.user.email.includes('@afrique-business.app'))
+          ? activeSession.user.email
           : undefined;
 
         const userObj: StoredUser = {
-          id: session.user.id,
+          id: activeSession.user.id,
           firstName: nameParts[0] || 'Utilisateur',
           lastName: nameParts.slice(1).join(' ') || '',
           fullName,
           email: cleanEmail,
-          phone: privPhone || session.user.phone,
+          phone: privPhone || activeSession.user.phone,
           country: (profile?.country as CountryCode) || 'CI',
           city: profile?.city || 'Abidjan',
           avatarUrl: profile?.avatar_url,
@@ -118,6 +131,9 @@ export default function App() {
         };
         setCurrentUserState(userObj);
         setCurrentUser(userObj);
+      } else {
+        setCurrentUserState(null);
+        setCurrentUser(null);
       }
     });
 
@@ -167,8 +183,25 @@ export default function App() {
     };
   }, []);
 
+  // Load real unread messages badge count and keep synchronized on realtime events
+  useEffect(() => {
+    if (!currentUser?.id || !isValidUuid(currentUser.id)) {
+      setUnreadMessagesTotal(0);
+      return;
+    }
+    const refreshUnread = () => {
+      fetchUnreadMessagesTotal(currentUser.id).then(setUnreadMessagesTotal).catch(() => {});
+    };
+    refreshUnread();
+    const unsubMessages = subscribeToRealtime('messages', refreshUnread);
+    return () => {
+      unsubMessages();
+    };
+  }, [currentUser?.id]);
+
   // Load real listings on mount and when country changes
   const loadListings = async () => {
+    setListingsError(null);
     try {
       const data = await fetchListings({
         country: scopeAllAfrica ? 'ALL' : currentCountry,
@@ -205,7 +238,7 @@ export default function App() {
         },
       }));
 
-      // Garantie stricte anti-doublon côté client (par ID et signature d'annonce)
+      // Garantie stricte anti-doublon côté client (par ID et signature d'annonce du même vendeur)
       const seenIds = new Set<string>();
       const seenSignatures = new Set<string>();
       const uniqueListings: Listing[] = [];
@@ -216,7 +249,7 @@ export default function App() {
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '')
           .slice(0, 20);
-        const sig = `${item.price}_${normTitle}_${item.city}`;
+        const sig = `${item.user_id || 'unknown'}_${item.price}_${normTitle}_${item.city}`;
         if (seenSignatures.has(sig)) continue;
 
         seenIds.add(item.id);
@@ -227,6 +260,7 @@ export default function App() {
       setListings(uniqueListings);
     } catch (err: any) {
       console.error('loadListings error:', err);
+      setListingsError(err?.message || 'Impossible de charger les annonces. Vérifiez votre connexion.');
     }
   };
 
@@ -377,25 +411,20 @@ export default function App() {
     if (!activeUser) {
       activeUser = getCurrentUser();
     }
-    if (!activeUser) {
+    if (!activeUser || !isValidUuid(activeUser.id)) {
+      appToast('Veuillez vous reconnecter pour publier une annonce.', 'info');
       setAuthDefaultMode('LOGIN');
       setShowAuthModal(true);
       return;
-    }
-
-    if (!isValidUuid(activeUser.id)) {
-      activeUser = {
-        ...activeUser,
-        id: crypto.randomUUID(),
-      };
-      setCurrentUser(activeUser);
-      setCurrentUserState(activeUser);
     }
 
     const currentUserId = activeUser.id;
 
     try {
       if (isEdit) {
+        const removedOldImages = (editingListing?.images || []).filter(
+          (oldUrl) => !listingData.images.includes(oldUrl)
+        );
         await updateListing(listingData.id, currentUserId, {
           title: listingData.title,
           description: listingData.description,
@@ -410,6 +439,12 @@ export default function App() {
           category: listingData.category as any,
           subcategory: listingData.subcategory || null,
         });
+
+        if (removedOldImages.length > 0) {
+          Promise.all(
+            removedOldImages.map((url) => deleteOwnStoragePhoto('listings', currentUserId, url))
+          ).catch(() => {});
+        }
 
         addNotification({
           title: 'Annonce mise à jour !',
@@ -463,8 +498,16 @@ export default function App() {
   // Handler: Delete Listing
   const handleDeleteListing = async (listingId: string) => {
     if (!currentUser) return;
+    const targetListing =
+      listings.find((l) => l.id === listingId) ||
+      (selectedListing?.id === listingId ? selectedListing : null);
     try {
       await deleteListing(listingId, currentUser.id);
+      if (targetListing?.images && targetListing.images.length > 0) {
+        Promise.all(
+          targetListing.images.map((url) => deleteOwnStoragePhoto('listings', currentUser.id, url))
+        ).catch(() => {});
+      }
       await loadListings();
       setSelectedListing(null);
 
@@ -474,7 +517,7 @@ export default function App() {
         type: 'LISTING',
       });
     } catch (err: any) {
-      alert(`Suppression impossible : ${err.message}`);
+      appToast(`Suppression impossible : ${err.message || 'Erreur réseau'}`, 'error');
     }
   };
 
@@ -487,8 +530,16 @@ export default function App() {
       if (selectedListing && selectedListing.id === listingId) {
         setSelectedListing({ ...selectedListing, status: newStatus });
       }
+      appToast(
+        newStatus === 'sold'
+          ? 'Annonce marquée comme vendue.'
+          : newStatus === 'paused'
+          ? 'Annonce mise en pause.'
+          : 'Annonce réactivée.',
+        'success'
+      );
     } catch (err: any) {
-      alert(`Mise à jour impossible : ${err.message}`);
+      appToast(`Mise à jour impossible : ${err.message || 'Erreur réseau'}`, 'error');
     }
   };
 
@@ -506,8 +557,9 @@ export default function App() {
       setActiveTab('messages');
       setShowCommunityView(false);
       setSelectedListing(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error starting conversation:', err);
+      appToast(err?.message || "Impossible d'ouvrir la discussion.", 'error');
     }
   };
 
@@ -532,6 +584,10 @@ export default function App() {
           onMarkNotificationsRead={() => {
             markNotificationsAsRead();
             setNotifications(getStoredNotifications());
+          }}
+          onClearNotifications={() => {
+            clearStoredNotifications();
+            setNotifications([]);
           }}
           currentUser={currentUser}
           searchQuery={searchQuery}
@@ -611,6 +667,9 @@ export default function App() {
               scopeAllAfrica={scopeAllAfrica}
               viewerCurrency={viewerCurrency}
               dataSaver={dataSaver}
+              searchQuery={searchQuery}
+              listingsError={listingsError}
+              onRetryLoad={loadListings}
               onSelectListing={(l) => setSelectedListing(l)}
               onQuickSell={() => {
                 if (!currentUser) {
@@ -628,6 +687,8 @@ export default function App() {
               listings={listings}
               currentCountry={currentCountry}
               viewerCurrency={viewerCurrency}
+              searchQuery={searchQuery}
+              dataSaver={dataSaver}
               onSelectListing={(l) => setSelectedListing(l)}
               onQuickSell={() => {
                 if (!currentUser) {
@@ -659,6 +720,7 @@ export default function App() {
               currentUserId={currentUser?.id}
               activeConversationId={targetChatConvId}
               onSelectConversation={(cid) => setTargetChatConvId(cid)}
+              onUnreadCountChange={(total) => setUnreadMessagesTotal(total)}
               onNavigateExplore={() => setActiveTab('explore')}
               onRequireAuth={() => {
                 setAuthDefaultMode('LOGIN');
@@ -724,8 +786,22 @@ export default function App() {
         isOpen={Boolean(selectedListing)}
         onClose={() => {
           setSelectedListing(null);
-          if (window.location.hash.includes('ad-') || window.location.hash.includes('/ad/')) {
-            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          const url = new URL(window.location.href);
+          let changed = false;
+          if (url.searchParams.has('ad')) {
+            url.searchParams.delete('ad');
+            changed = true;
+          }
+          if (url.searchParams.has('listing')) {
+            url.searchParams.delete('listing');
+            changed = true;
+          }
+          if (url.hash.includes('ad-') || url.hash.includes('/ad/')) {
+            url.hash = '';
+            changed = true;
+          }
+          if (changed) {
+            window.history.replaceState(null, '', url.pathname + url.search + url.hash);
           }
         }}
         viewerCurrency={viewerCurrency}
@@ -783,6 +859,9 @@ export default function App() {
 
       {/* 6. PWA Update & Offline Notifications */}
       <PWAUpdateToast />
+
+      {/* 7. Global In-App Toasts & Confirmation Dialog */}
+      <FeedbackHost />
     </div>
   );
 }

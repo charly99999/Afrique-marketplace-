@@ -1,4 +1,18 @@
 import { safeFetchJson } from './apiClient';
+import { supabase } from './supabase';
+
+async function getBearerHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch {
+    // ignore
+  }
+  return headers;
+}
 
 export type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
@@ -120,9 +134,10 @@ export async function sendPostReaction(
   userInfo?: { fullName?: string; avatarUrl?: string }
 ): Promise<{ action: 'added' | 'removed' | 'updated'; currentReaction: ReactionType | null; stats: PostSocialStats } | null> {
   try {
+    const headers = await getBearerHeaders();
     const res = await safeFetchJson<{ action: 'added' | 'removed' | 'updated'; currentReaction: ReactionType | null; stats: PostSocialStats }>('/api/social/reactions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         postId,
         userId,
@@ -146,9 +161,10 @@ export async function recordPostShare(
   createdPostId?: string
 ): Promise<{ sharesCount: number } | null> {
   try {
+    const headers = await getBearerHeaders();
     const res = await safeFetchJson<{ sharesCount: number }>('/api/social/shares', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         postId,
         userId,

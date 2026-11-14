@@ -19,7 +19,7 @@ export function onServiceWorkerUpdate(callback: UpdateCallback): () => void {
   updateListeners.add(callback);
   if (isUpdatePending) {
     callback({
-      version: currentClientVersion || '2.5.0',
+      version: currentClientVersion || '3.0.0',
       hasWaitingWorker: Boolean(swRegistration?.waiting),
       serverUpdated: true,
     });
@@ -79,7 +79,7 @@ export async function checkForUpdates(): Promise<boolean> {
       if (swRegistration.waiting) {
         found = true;
         notifyUpdateAvailable({
-          version: currentClientVersion || '2.5.0',
+          version: currentClientVersion || '3.0.0',
           hasWaitingWorker: true,
         });
       }
@@ -142,7 +142,7 @@ export function registerSW() {
         // Immediate check if worker is already waiting
         if (reg.waiting) {
           notifyUpdateAvailable({
-            version: '2.5.0',
+            version: '3.0.0',
             hasWaitingWorker: true,
           });
         }
@@ -159,7 +159,7 @@ export function registerSW() {
             ) {
               console.log('[Afrique Business PWA] New Service Worker version waiting activation.');
               notifyUpdateAvailable({
-                version: '2.5.0',
+                version: '3.0.0',
                 hasWaitingWorker: true,
               });
             }

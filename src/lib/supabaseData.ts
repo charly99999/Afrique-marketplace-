@@ -1,8 +1,8 @@
 import { supabase } from './supabase';
 import { compressImageToWebP } from './imageCompressor';
 import { sanitizeText, sanitizeUrl } from './security';
-import { safeFetchJson } from './apiClient';
-import { saveListing, getStoredListings, deleteStoredListing, getCurrentUser } from './storage';
+import { getCurrentUser } from './storage';
+import { findClientCredential } from './clientAuthStore';
 
 export type CategoryKey = 
   | 'vehicules'
@@ -169,7 +169,7 @@ export async function updateProfile(
   userId: string,
   updates: Partial<UserProfileData>
 ): Promise<UserProfileData> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
 
   // STRICT COLUMN FILTER: Only these columns are allowed by backend schema
   const allowedKeys = [
@@ -226,44 +226,31 @@ export async function updateProfileAvatar(
   file: File | Blob,
   previousAvatarUrl?: string
 ): Promise<string> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
 
   // 1. Compression WebP max 800px, qualité 0.8
   const { blob } = await compressImageToWebP(file, 800, 800, 0.8);
   const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
   const filePath = `${validUid}/${uniqueName}`;
 
-  // 2. Envoi vers le bucket "avatars" avec upsert
-  let publicUrl = '';
-  try {
-    const { data, error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, blob, {
-        contentType: 'image/webp',
-        upsert: true,
-      });
+  // 2. Envoi vers le bucket "avatars"
+  const { data, error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(filePath, blob, {
+      contentType: 'image/webp',
+      upsert: true,
+    });
 
-    if (!uploadError && data) {
-      const { data: pubData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      if (pubData?.publicUrl) {
-        publicUrl = pubData.publicUrl;
-      }
-    }
-  } catch (storageErr) {
-    console.warn('Avatars storage upload note:', storageErr);
+  if (uploadError || !data) {
+    throw new Error(
+      `Téléversement de la photo de profil impossible : ${uploadError?.message || 'accès refusé'}.`
+    );
   }
 
-  // Fallback résilient en cas de restriction RLS : Data URL WebP compressée
+  const { data: pubData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+  const publicUrl = pubData?.publicUrl;
   if (!publicUrl) {
-    publicUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') resolve(reader.result);
-        else reject(new Error("Échec conversion avatar"));
-      };
-      reader.onerror = () => reject(new Error("Erreur lecture avatar"));
-      reader.readAsDataURL(blob);
-    });
+    throw new Error("Impossible d'obtenir l'URL publique de l'avatar.");
   }
 
   // 4. Update UNIQUEMENT avatar_url dans la table profiles
@@ -292,32 +279,43 @@ export async function updateProfileAvatar(
     }
   }
 
-  // 6. Retourne l'URL rafraîchie avec paramètre anti-cache
-  return `${publicUrl}?v=${Date.now()}`;
+  // 6. Retourne l'URL rafraîchie avec paramètre anti-cache sans casser d'éventuels query params
+  const separator = publicUrl.includes('?') ? '&' : '?';
+  return `${publicUrl}${separator}v=${Date.now()}`;
 }
 
-// Requirement C: Téléphone du compte (profile_private)
+// Requirement C: Téléphone du compte (profile_private + cache session courant)
 export async function getAccountPhone(userId: string): Promise<string | null> {
   try {
-    const validUid = await resolveValidAuthUid(userId);
-    const { data, error } = await supabase
+    const validUid = await requireAuthenticatedSessionUid(userId);
+    const { data } = await supabase
       .from('profile_private')
       .select('phone')
       .eq('id', validUid)
       .maybeSingle();
 
-    if (error) {
-      console.warn('getAccountPhone error:', error.message);
-      return null;
+    if (data?.phone) {
+      return data.phone;
     }
-    return data?.phone || null;
   } catch {
-    return null;
+    // Non bloquant si lecture seule hors session complète
   }
+
+  try {
+    const cur = getCurrentUser();
+    if (cur?.id === userId && cur.phone) return cur.phone;
+  } catch {}
+
+  try {
+    const cred = findClientCredential(userId);
+    if (cred?.userId === userId && cred.phone) return cred.phone;
+  } catch {}
+
+  return null;
 }
 
 export async function updateAccountPhone(userId: string, phone: string): Promise<void> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const cleanPhone = phone.trim();
 
   // Validation du format : chiffres avec indicatif pays, min 8 max 15 chiffres
@@ -326,7 +324,6 @@ export async function updateAccountPhone(userId: string, phone: string): Promise
     throw new Error('Format de numéro invalide. Exemple : +2250707070707 (chiffres avec indicatif pays).');
   }
 
-  // Enregistre dans profile_private (update de la colonne phone uniquement, filtré par id = user.id)
   const { data: updatedRows, error: updateError } = await supabase
     .from('profile_private')
     .update({ phone: cleanPhone })
@@ -338,7 +335,6 @@ export async function updateAccountPhone(userId: string, phone: string): Promise
     throw new Error(`Enregistrement du numéro impossible : ${updateError.message}`);
   }
 
-  // If no existing row was matched, insert it
   if (!updatedRows || updatedRows.length === 0) {
     const { error: insertError } = await supabase
       .from('profile_private')
@@ -356,116 +352,168 @@ export function isValidUuid(id?: string | null): boolean {
   return Boolean(id && UUID_REGEX.test(id));
 }
 
-export async function resolveValidAuthUid(candidateId?: string | null): Promise<string> {
-  // 1. First check if an authenticated Supabase session is active or can be refreshed
-  try {
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) {
-      try {
-        const { data: refreshData } = await supabase.auth.refreshSession();
-        session = refreshData?.session || null;
-      } catch {
-        // ignore refresh failure
-      }
+export async function requireAuthenticatedSessionUid(expectedUserId?: string | null): Promise<string> {
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    try {
+      const { data: refreshData } = await supabase.auth.refreshSession();
+      session = refreshData?.session || null;
+    } catch {
+      session = null;
     }
-
-    // 2. Prioritize authenticated Supabase user ID to strictly satisfy RLS policies
-    if (session?.user?.id && isValidUuid(session.user.id)) {
-      return session.user.id;
-    }
-  } catch {
-    // ignore
   }
 
-  // 3. Fallback to candidate ID from local user session
-  if (candidateId && isValidUuid(candidateId)) {
-    return candidateId;
+  const sessionUid = session?.user?.id;
+  if (!sessionUid || !isValidUuid(sessionUid)) {
+    throw new Error('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
   }
 
-  // 4. Fallback to localStorage current user
-  try {
-    const cur = getCurrentUser();
-    if (cur?.id && isValidUuid(cur.id)) {
-      return cur.id;
-    }
-  } catch {}
+  if (expectedUserId && isValidUuid(expectedUserId) && expectedUserId !== sessionUid) {
+    throw new Error("Action non autorisée : votre session active ne correspond pas à ce compte.");
+  }
 
-  // 5. Default admin ID
-  return 'd2882463-6bcf-414a-8844-6c06279e50e0';
+  return sessionUid;
 }
 
 // ----------------------------------------------------
-// 2. STORAGE (Bucket Uploads - Max 1600px WebP)
+// 2. STORAGE (Bucket Uploads - Max 1600px WebP + Download)
 // ----------------------------------------------------
 export async function uploadWebpImage(
   bucket: 'avatars' | 'listings' | 'posts' | 'chat',
   userId: string,
   file: File | Blob,
-  conversationId?: string
+  conversationId?: string,
+  onProgress?: (percent: number) => void
 ): Promise<string> {
-  // Validate max size 5MB
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('Image trop volumineuse. Taille maximale autorisée : 5 Mo.');
+  // Validate input file size before compression (max 15 Mo)
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error('Image trop volumineuse. Taille maximale autorisée : 15 Mo.');
   }
 
-  // 1. Resolve owner UUID: prefer active session UID, then provided userId, or standard identifier
-  let validUid = userId;
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.id && isValidUuid(session.user.id)) {
-      validUid = session.user.id;
-    } else if (userId && isValidUuid(userId)) {
-      validUid = userId;
-    } else {
-      validUid = await resolveValidAuthUid(userId);
-    }
-  } catch {
-    validUid = (userId && isValidUuid(userId)) ? userId : 'public_user';
-  }
+  onProgress?.(10);
 
-  // 2. Compress image to optimized WebP (max 1600px, 85% quality)
+  // 1. Strictly enforce authenticated Supabase session UID for Storage RLS
+  const validUid = await requireAuthenticatedSessionUid(userId);
+  onProgress?.(25);
+
+  // 2. Compress and validate image magic bytes -> WebP (max 1600px, 85% quality)
   const { blob } = await compressImageToWebP(file, 1600, 1600, 0.85);
-  const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
+  if (blob.size > 5 * 1024 * 1024) {
+    throw new Error('Image compressée trop volumineuse (max 5 Mo).');
+  }
+  onProgress?.(60);
 
+  const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
   let filePath = `${validUid}/${uniqueName}`;
   if (bucket === 'chat' && conversationId) {
     filePath = `${validUid}/${conversationId}/${uniqueName}`;
   }
 
-  // 3. Attempt direct Supabase Storage upload
-  try {
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, blob, {
-        contentType: 'image/webp',
-        upsert: true,
-      });
+  // 3. Direct Supabase Storage upload
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, blob, {
+      contentType: 'image/webp',
+      upsert: false,
+    });
 
-    if (!error && data) {
-      if (bucket === 'chat') {
-        const { data: signed, error: signErr } = await supabase.storage
-          .from(bucket)
-          .createSignedUrl(filePath, 60 * 60 * 24 * 7);
-        if (!signErr && signed?.signedUrl) {
-          return signed.signedUrl;
-        }
-      } else {
-        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(filePath);
-        if (pub?.publicUrl) {
-          return pub.publicUrl;
-        }
-      }
-    }
-    console.warn(`Direct storage upload returned note for ${bucket}:`, error?.message);
-  } catch (storageErr: any) {
-    console.warn(`Direct storage upload attempt caught error for ${bucket}:`, storageErr?.message);
+  if (error || !data) {
+    throw new Error(
+      `Échec du téléversement de la photo (${error?.message || 'accès refusé'}). Vérifiez votre connexion ou reconnectez-vous.`
+    );
   }
 
-  // Pas de faux succès : si Supabase Storage refuse l'envoi, on le dit clairement.
-  // (Ni image stockée en base64 dans la base, ni copie sur le disque du serveur, qui est temporaire sur Vercel.)
-  throw new Error(
-    "Échec du téléversement de la photo : session expirée ou accès refusé par le stockage. Déconnectez-vous, reconnectez-vous puis réessayez."
-  );
+  onProgress?.(90);
+
+  if (bucket === 'chat') {
+    const { data: signed, error: signErr } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(filePath, 60 * 60 * 24 * 7);
+    if (signErr || !signed?.signedUrl) {
+      throw new Error(`Impossible de générer le lien sécurisé de la photo (${signErr?.message || 'erreur'}).`);
+    }
+    onProgress?.(100);
+    return signed.signedUrl;
+  }
+
+  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  if (!pub?.publicUrl) {
+    throw new Error("Impossible d'obtenir l'URL publique de la photo.");
+  }
+
+  onProgress?.(100);
+  return pub.publicUrl;
+}
+
+export async function deleteOwnStoragePhoto(
+  bucket: 'avatars' | 'listings' | 'posts' | 'chat',
+  userId: string,
+  publicUrl: string
+): Promise<void> {
+  try {
+    if (!publicUrl || !publicUrl.includes(`/${bucket}/`)) return;
+    const validUid = await requireAuthenticatedSessionUid(userId);
+    const match = publicUrl.match(new RegExp(`/${bucket}/([^?]+)`));
+    if (!match?.[1]) return;
+    const objectPath = decodeURIComponent(match[1]);
+    if (!objectPath.startsWith(`${validUid}/`)) return;
+    await supabase.storage.from(bucket).remove([objectPath]);
+  } catch (err) {
+    console.warn('Nettoyage image ignoré:', err);
+  }
+}
+
+export async function resolveChatSignedUrl(storedUrl: string): Promise<string> {
+  if (!storedUrl) return storedUrl;
+  let objectPath: string | null = null;
+  if (storedUrl.startsWith('chat://')) {
+    objectPath = storedUrl.slice('chat://'.length);
+  } else if (storedUrl.includes('/chat/')) {
+    const match = storedUrl.match(/\/object\/(?:sign|public)\/chat\/([^?]+)/) || storedUrl.match(/\/chat\/([^?]+)/);
+    if (match?.[1]) {
+      objectPath = decodeURIComponent(match[1]);
+    }
+  }
+  if (!objectPath) return storedUrl;
+  try {
+    const { data, error } = await supabase.storage
+      .from('chat')
+      .createSignedUrl(objectPath, 60 * 60 * 24 * 7);
+    if (!error && data?.signedUrl) {
+      return data.signedUrl;
+    }
+  } catch {
+    // keep original url if re-signing fails
+  }
+  return storedUrl;
+}
+
+export async function downloadImageSafely(url: string, filenameBase: string = 'afrique-business-photo'): Promise<void> {
+  const effectiveUrl = url.startsWith('chat://') || url.includes('/object/sign/chat/')
+    ? await resolveChatSignedUrl(url)
+    : url;
+  const safeUrl = sanitizeUrl(effectiveUrl);
+  if (!safeUrl) {
+    throw new Error('Lien image invalide.');
+  }
+  const cleanName = filenameBase.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48) || 'afrique-business-photo';
+  const res = await fetch(safeUrl, { mode: 'cors' });
+  if (!res.ok) {
+    throw new Error(`Téléchargement impossible (HTTP ${res.status}).`);
+  }
+  const blob = await res.blob();
+  const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'webp';
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = `${cleanName}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  }
 }
 
 // ----------------------------------------------------
@@ -508,151 +556,86 @@ export async function fetchListings(filters?: {
   limit?: number;
   offset?: number;
 }): Promise<ListingData[]> {
-  const listingsMap = new Map<string, ListingData>();
-  let supabaseOk = false;
+  let query = supabase.from('listings').select(`
+    *,
+    seller:profiles!listings_user_id_fkey (
+      id, full_name, avatar_url, phone_verified, city, country, chats_enabled
+    )
+  `);
 
-  // 1. Fetch from Supabase cloud database
-  try {
-    let query = supabase.from('listings').select(`
+  if (filters?.userId) {
+    query = query.eq('user_id', filters.userId);
+  } else {
+    query = query.eq('status', filters?.status || 'active');
+  }
+
+  if (filters?.category && filters.category !== 'ALL') {
+    query = query.eq('category', filters.category);
+  }
+
+  if (filters?.country && filters.country !== 'ALL') {
+    query = query.eq('country', filters.country);
+  }
+
+  if (filters?.city && filters.city.trim()) {
+    query = query.ilike('city', `%${filters.city.trim()}%`);
+  }
+
+  if (filters?.search && filters.search.trim()) {
+    const q = filters.search.trim().replace(/[,()*%\\]/g, ' ').trim();
+    if (q) {
+      query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,subcategory.ilike.%${q}%`);
+    }
+  }
+
+  if (filters?.sortBy === 'price_asc') {
+    query = query.order('price', { ascending: true });
+  } else if (filters?.sortBy === 'price_desc') {
+    query = query.order('price', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+
+  const limit = filters?.limit ?? 200;
+  const offset = filters?.offset ?? 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Supabase fetchListings error:', error.message);
+    throw new Error(`Impossible de charger les annonces : ${error.message}`);
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    images: normalizeImages(item.images),
+  })) as ListingData[];
+}
+
+export async function fetchListingsByIds(ids: string[]): Promise<ListingData[]> {
+  const validIds = Array.from(new Set(ids.filter((id) => isValidUuid(id))));
+  if (validIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('listings')
+    .select(`
       *,
       seller:profiles!listings_user_id_fkey (
         id, full_name, avatar_url, phone_verified, city, country, chats_enabled
       )
-    `);
+    `)
+    .in('id', validIds)
+    .order('created_at', { ascending: false });
 
-    if (filters?.userId) {
-      query = query.eq('user_id', filters.userId);
-    } else {
-      query = query.eq('status', filters?.status || 'active');
-    }
-
-    if (filters?.category && filters.category !== 'ALL') {
-      query = query.eq('category', filters.category);
-    }
-
-    if (filters?.country && filters.country !== 'ALL') {
-      query = query.eq('country', filters.country);
-    }
-
-    if (filters?.city && filters.city.trim()) {
-      query = query.ilike('city', `%${filters.city.trim()}%`);
-    }
-
-    if (filters?.search && filters.search.trim()) {
-      const q = filters.search.trim();
-      query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,subcategory.ilike.%${q}%`);
-    }
-
-    if (filters?.sortBy === 'price_asc') {
-      query = query.order('price', { ascending: true });
-    } else if (filters?.sortBy === 'price_desc') {
-      query = query.order('price', { ascending: false });
-    } else {
-      query = query.order('created_at', { ascending: false });
-    }
-
-    const limit = filters?.limit ?? 200;
-    const offset = filters?.offset ?? 0;
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error } = await query;
-    if (!error && Array.isArray(data)) {
-      supabaseOk = true;
-      for (const item of data) {
-        if (item.id) {
-          (item as any).images = normalizeImages(item.images);
-          listingsMap.set(item.id, item as ListingData);
-        }
-      }
-    }
-  } catch (err: any) {
-    console.warn('Supabase fetchListings note:', err?.message);
+  if (error) {
+    console.error('Supabase fetchListingsByIds error:', error.message);
+    throw new Error(`Impossible de charger vos annonces favorites : ${error.message}`);
   }
 
-  // 2. Fetch from Express Server Store (/api/listings) — uniquement si Supabase est injoignable
-  if (!supabaseOk) try {
-    const serverRes = await safeFetchJson<{ success: boolean; listings: ListingData[] }>('/api/listings');
-    if (serverRes.ok && serverRes.data?.success && Array.isArray(serverRes.data.listings)) {
-      for (const item of serverRes.data.listings) {
-        if (item.id && !listingsMap.has(item.id)) {
-          (item as any).images = normalizeImages(item.images);
-          listingsMap.set(item.id, item);
-        }
-      }
-    }
-  } catch (serverErr: any) {
-    console.warn('Server fetchListings note:', serverErr?.message);
-  }
-
-  // 3. Fallback to LocalStorage stored listings — uniquement si Supabase est injoignable
-  if (!supabaseOk) try {
-    const stored = getStoredListings();
-    for (const item of stored) {
-      if (item.id && !listingsMap.has(item.id)) {
-        listingsMap.set(item.id, {
-          id: item.id,
-          user_id: item.user_id || item.seller?.id || '',
-          title: item.title,
-          description: item.description,
-          price: item.price,
-          currency: item.currency,
-          category: item.category as CategoryKey,
-          subcategory: item.subcategory,
-          country: item.country,
-          city: item.city,
-          images: normalizeImages(item.images),
-          condition: (item.condition === 'neuf' || (item as any).condition === 'NEUF') ? 'neuf' : 'occasion' as ListingCondition,
-          contact_phone: item.contact_phone,
-          whatsapp_phone: item.whatsapp_phone,
-          status: (item.status === 'sold' || (item as any).status === 'SOLD') ? 'sold' : (item.status === 'paused' ? 'paused' : 'active') as ListingStatus,
-          created_at: item.createdAt || new Date().toISOString(),
-          edited_at: item.edited_at,
-          seller: item.seller ? {
-            id: item.seller.id,
-            full_name: item.seller.name || 'Vendeur',
-            avatar_url: item.seller.avatarUrl || item.seller.avatar_url,
-            phone_verified: item.seller.phone_verified,
-            city: item.seller.city,
-            country: item.seller.country,
-          } : undefined,
-        });
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  let list = Array.from(listingsMap.values());
-
-  // Apply in-memory filters for server/local items
-  if (filters?.userId) {
-    list = list.filter((l) => l.user_id === filters.userId);
-  } else if (filters?.status) {
-    list = list.filter((l) => l.status === filters.status);
-  }
-
-  if (filters?.category && filters.category !== 'ALL') {
-    list = list.filter((l) => l.category === filters.category);
-  }
-
-  if (filters?.country && filters.country !== 'ALL') {
-    list = list.filter((l) => l.country === filters.country);
-  }
-
-  if (filters?.city && filters.city.trim()) {
-    const c = filters.city.trim().toLowerCase();
-    list = list.filter((l) => (l.city || '').toLowerCase().includes(c));
-  }
-
-  if (filters?.search && filters.search.trim()) {
-    const q = filters.search.trim().toLowerCase();
-    list = list.filter((l) =>
-      (l.title || '').toLowerCase().includes(q) ||
-      (l.description || '').toLowerCase().includes(q)
-    );
-  }
-
-  return list;
+  return (data || []).map((item: any) => ({
+    ...item,
+    images: normalizeImages(item.images),
+  })) as ListingData[];
 }
 
 export async function createListing(listing: {
@@ -673,9 +656,8 @@ export async function createListing(listing: {
   id?: string;
   seller?: any;
 }): Promise<ListingData> {
-  const validUid = await resolveValidAuthUid(listing.user_id);
+  const validUid = await requireAuthenticatedSessionUid(listing.user_id);
 
-  // Validate contact phone formats (e.g. +2250707070707)
   const phoneRegex = /^\+?[0-9]{8,15}$/;
   const cleanContact = listing.contact_phone?.trim() || null;
   const cleanWhatsapp = listing.whatsapp_phone?.trim() || null;
@@ -692,10 +674,14 @@ export async function createListing(listing: {
   const safeCity = sanitizeText(listing.city, 60);
   const safeSubcategory = listing.subcategory ? sanitizeText(listing.subcategory, 60) : null;
   const safeImages: string[] = (listing.images || [])
-    .map(img => sanitizeUrl(img))
+    .map((img) => sanitizeUrl(img))
     .filter((img): img is string => typeof img === 'string' && img.length > 0);
 
-  const payload = {
+  if (safeImages.length === 0) {
+    throw new Error('Au moins une photo valide est requise pour publier une annonce.');
+  }
+
+  const payload: Record<string, any> = {
     user_id: validUid,
     title: safeTitle,
     category: listing.category,
@@ -712,103 +698,54 @@ export async function createListing(listing: {
     status: listing.status || 'active',
   };
 
-  let createdItem: ListingData | null = null;
+  if (isValidUuid(listing.id)) {
+    payload.id = listing.id;
+  }
 
-  // 1. Attempt primary insertion into Supabase PostgreSQL table
-  try {
-    const { data, error } = await supabase
-      .from('listings')
-      .insert(payload)
-      .select(`
-        *,
-        seller:profiles!listings_user_id_fkey (
-          id, full_name, avatar_url, phone_verified, city, country, chats_enabled
-        )
-      `)
-      .single();
+  const { data, error } = await supabase
+    .from('listings')
+    .insert(payload)
+    .select(`
+      *,
+      seller:profiles!listings_user_id_fkey (
+        id, full_name, avatar_url, phone_verified, city, country, chats_enabled
+      )
+    `)
+    .single();
 
-    if (!error && data) {
-      createdItem = data as ListingData;
-    } else {
-      console.error('Supabase DB insert error:', error);
-      throw new Error(
-        `L'annonce n'a pas été enregistrée : ${error?.message || 'erreur inconnue'}. ` +
-        `Si le message parle de sécurité (row-level security), déconnectez-vous puis reconnectez-vous avec votre mot de passe.`
-      );
+  if (error) {
+    // Idempotency recovery: if a slow mobile retry hits duplicate primary key for the same owner, return the already-created listing
+    if ((error.code === '23505' || error.message?.includes('duplicate key')) && isValidUuid(listing.id)) {
+      const { data: existing } = await supabase
+        .from('listings')
+        .select(`
+          *,
+          seller:profiles!listings_user_id_fkey (
+            id, full_name, avatar_url, phone_verified, city, country, chats_enabled
+          )
+        `)
+        .eq('id', listing.id!)
+        .eq('user_id', validUid)
+        .maybeSingle();
+
+      if (existing) {
+        return {
+          ...existing,
+          images: normalizeImages((existing as any).images),
+        } as ListingData;
+      }
     }
-  } catch (err: any) {
-    if (err?.message?.startsWith("L'annonce n'a pas été enregistrée")) throw err;
-    console.error('Supabase DB insert caught error:', err);
-    throw new Error(`L'annonce n'a pas été enregistrée : ${err?.message || 'connexion impossible'}.`);
+    throw new Error(`Enregistrement dans Supabase impossible : ${error.message || 'erreur inconnue'}`);
   }
 
-  const generatedId = createdItem?.id || listing.id || `lst_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-
-  // Construct complete listing object with seller profile
-  const finalListing: ListingData = createdItem || {
-    id: generatedId,
-    created_at: new Date().toISOString(),
-    ...payload,
-    seller: listing.seller || {
-      id: validUid,
-      full_name: 'Vendeur',
-      avatar_url: undefined,
-      phone_verified: false,
-      city: safeCity,
-      country: listing.country,
-    },
-  };
-
-  // 2. Persist to Express Server Store (accessible to all visitors & devices across Africa)
-  try {
-    await safeFetchJson('/api/listings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(finalListing),
-    });
-  } catch (serverErr) {
-    console.warn('Server listing sync note:', serverErr);
+  if (!data) {
+    throw new Error('Enregistrement dans Supabase impossible : aucune donnée retournée.');
   }
 
-  // 3. Persist to LocalStorage client store
-  try {
-    saveListing({
-      id: finalListing.id,
-      user_id: finalListing.user_id,
-      title: finalListing.title,
-      description: finalListing.description,
-      price: finalListing.price,
-      currency: finalListing.currency,
-      category: finalListing.category as any,
-      subcategory: finalListing.subcategory || undefined,
-      country: (finalListing.country as any) || 'CI',
-      city: finalListing.city,
-      images: finalListing.images,
-      condition: finalListing.condition === 'neuf' ? 'neuf' : 'occasion',
-      isNegotiable: true,
-      contact_phone: finalListing.contact_phone || undefined,
-      whatsapp_phone: finalListing.whatsapp_phone || undefined,
-      status: finalListing.status || 'active',
-      createdAt: finalListing.created_at,
-      viewsCount: 0,
-      seller: {
-        id: finalListing.seller?.id || validUid,
-        name: finalListing.seller?.full_name || 'Vendeur',
-        phone: finalListing.contact_phone || '',
-        whatsapp: finalListing.whatsapp_phone || finalListing.contact_phone || '',
-        avatarUrl: finalListing.seller?.avatar_url,
-        avatar_url: finalListing.seller?.avatar_url,
-        verified: Boolean(finalListing.seller?.phone_verified),
-        phone_verified: Boolean(finalListing.seller?.phone_verified),
-        city: finalListing.seller?.city || finalListing.city,
-        country: finalListing.seller?.country || finalListing.country,
-      },
-    });
-  } catch (localErr) {
-    console.warn('LocalStorage saveListing note:', localErr);
-  }
-
-  return finalListing;
+  return {
+    ...data,
+    images: normalizeImages((data as any).images),
+  } as ListingData;
 }
 
 export async function updateListing(
@@ -816,6 +753,8 @@ export async function updateListing(
   userId: string,
   updates: Partial<Omit<ListingData, 'id' | 'user_id' | 'created_at' | 'seller'>>
 ): Promise<ListingData> {
+  const validUid = await requireAuthenticatedSessionUid(userId);
+
   const phoneRegex = /^\+?[0-9]{8,15}$/;
   if (updates.contact_phone) {
     const clean = String(updates.contact_phone).trim();
@@ -844,108 +783,46 @@ export async function updateListing(
     sanitizedUpdates.subcategory = sanitizeText(sanitizedUpdates.subcategory, 60);
   }
   if (Array.isArray(sanitizedUpdates.images)) {
-    sanitizedUpdates.images = sanitizedUpdates.images.map(img => sanitizeUrl(img)).filter(Boolean);
+    sanitizedUpdates.images = sanitizedUpdates.images.map((img) => sanitizeUrl(img)).filter(Boolean);
   }
 
-  // 1. Supabase update
-  let updatedItem: ListingData | null = null;
-  try {
-    const { data, error } = await supabase
-      .from('listings')
-      .update({
-        ...sanitizedUpdates,
-        edited_at: new Date().toISOString(),
-      })
-      .eq('id', listingId)
-      .eq('user_id', userId)
-      .select(`
-        *,
-        seller:profiles!listings_user_id_fkey (
-          id, full_name, avatar_url, phone_verified, city, country, chats_enabled
-        )
-      `)
-      .single();
+  const { data, error } = await supabase
+    .from('listings')
+    .update({
+      ...sanitizedUpdates,
+      edited_at: new Date().toISOString(),
+    })
+    .eq('id', listingId)
+    .eq('user_id', validUid)
+    .select(`
+      *,
+      seller:profiles!listings_user_id_fkey (
+        id, full_name, avatar_url, phone_verified, city, country, chats_enabled
+      )
+    `)
+    .single();
 
-    if (error || !data) {
-      console.error('Supabase updateListing error:', error);
-      throw new Error(`La modification n'a pas été enregistrée : ${error?.message || 'annonce introuvable ou accès refusé'}.`);
-    }
-    updatedItem = data as ListingData;
-  } catch (err: any) {
-    if (err?.message?.startsWith("La modification n'a pas été enregistrée")) throw err;
-    console.error('Supabase updateListing caught error:', err);
-    throw new Error(`La modification n'a pas été enregistrée : ${err?.message || 'connexion impossible'}.`);
+  if (error || !data) {
+    throw new Error(`Mise à jour de l'annonce impossible : ${error?.message || 'accès refusé ou annonce introuvable'}`);
   }
 
-  const finalListing: ListingData = updatedItem || {
-    id: listingId,
-    user_id: userId,
-    title: sanitizedUpdates.title || 'Annonce',
-    description: sanitizedUpdates.description || '',
-    price: sanitizedUpdates.price || 0,
-    currency: sanitizedUpdates.currency || 'XOF',
-    category: sanitizedUpdates.category || 'autres',
-    condition: sanitizedUpdates.condition || 'occasion',
-    country: sanitizedUpdates.country || 'CI',
-    city: sanitizedUpdates.city || '',
-    images: sanitizedUpdates.images || [],
-    created_at: new Date().toISOString(),
-    edited_at: new Date().toISOString(),
-    status: sanitizedUpdates.status || 'active',
-  };
-
-  // 2. Server store update
-  try {
-    await safeFetchJson(`/api/listings/${listingId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(finalListing),
-    });
-  } catch {}
-
-  // 3. LocalStorage update
-  try {
-    saveListing({
-      ...finalListing,
-      condition: finalListing.condition === 'neuf' ? 'neuf' : 'occasion',
-      viewsCount: 0,
-      seller: {
-        id: finalListing.seller?.id || userId,
-        name: finalListing.seller?.full_name || 'Vendeur',
-        phone: finalListing.contact_phone || '',
-        whatsapp: finalListing.whatsapp_phone || finalListing.contact_phone || '',
-        avatarUrl: finalListing.seller?.avatar_url,
-        avatar_url: finalListing.seller?.avatar_url,
-        verified: Boolean(finalListing.seller?.phone_verified),
-        phone_verified: Boolean(finalListing.seller?.phone_verified),
-        city: finalListing.seller?.city || finalListing.city,
-        country: finalListing.seller?.country || finalListing.country,
-      },
-    } as any);
-  } catch {}
-
-  return finalListing;
+  return {
+    ...data,
+    images: normalizeImages((data as any).images),
+  } as ListingData;
 }
 
 export async function deleteListing(listingId: string, userId: string): Promise<void> {
-  // 1. Supabase delete
-  try {
-    await supabase
-      .from('listings')
-      .delete()
-      .eq('id', listingId)
-      .eq('user_id', userId);
-  } catch {}
+  const validUid = await requireAuthenticatedSessionUid(userId);
+  const { error } = await supabase
+    .from('listings')
+    .delete()
+    .eq('id', listingId)
+    .eq('user_id', validUid);
 
-  // 2. Server delete
-  try {
-    await safeFetchJson(`/api/listings/${listingId}`, { method: 'DELETE' });
-  } catch {}
-
-  // 3. LocalStorage delete
-  try {
-    deleteStoredListing(listingId);
-  } catch {}
+  if (error) {
+    throw new Error(`Suppression de l'annonce impossible : ${error.message}`);
+  }
 }
 
 // ----------------------------------------------------
@@ -999,7 +876,7 @@ export async function fetchPosts(
 }
 
 export async function createPost(userId: string, content: string, images: string[] = []): Promise<PostData> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const safeContent = sanitizeText(content, 3000);
   const safeImages = (images || []).map(img => sanitizeUrl(img)).filter(Boolean);
 
@@ -1037,7 +914,7 @@ export async function createPost(userId: string, content: string, images: string
 }
 
 export async function updatePost(postId: string, userId: string, content: string): Promise<void> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const safeContent = sanitizeText(content, 3000);
   const { error } = await supabase
     .from('posts')
@@ -1054,7 +931,7 @@ export async function updatePost(postId: string, userId: string, content: string
 }
 
 export async function deletePost(postId: string, userId: string): Promise<void> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const { error } = await supabase
     .from('posts')
     .delete()
@@ -1067,9 +944,8 @@ export async function deletePost(postId: string, userId: string): Promise<void> 
 }
 
 export async function togglePostLike(postId: string, userId: string): Promise<boolean> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
 
-  // Check if liked
   const { data: existing } = await supabase
     .from('post_likes')
     .select('*')
@@ -1078,10 +954,12 @@ export async function togglePostLike(postId: string, userId: string): Promise<bo
     .maybeSingle();
 
   if (existing) {
-    await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', validUid);
+    const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', validUid);
+    if (error) throw new Error(error.message);
     return false;
   } else {
-    await supabase.from('post_likes').insert({ post_id: postId, user_id: validUid });
+    const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: validUid });
+    if (error) throw new Error(error.message);
     return true;
   }
 }
@@ -1106,7 +984,7 @@ export async function fetchComments(postId: string): Promise<CommentData[]> {
 }
 
 export async function createComment(postId: string, userId: string, content: string): Promise<CommentData> {
-  const validUid = await resolveValidAuthUid(userId);
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const safeContent = sanitizeText(content, 1000);
 
   const { data, error } = await supabase
@@ -1131,6 +1009,7 @@ export async function createComment(postId: string, userId: string, content: str
 }
 
 export async function updateComment(commentId: string, userId: string, content: string): Promise<void> {
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const safeContent = sanitizeText(content, 1000);
   const { error } = await supabase
     .from('comments')
@@ -1139,7 +1018,7 @@ export async function updateComment(commentId: string, userId: string, content: 
       edited_at: new Date().toISOString(),
     })
     .eq('id', commentId)
-    .eq('user_id', userId);
+    .eq('user_id', validUid);
 
   if (error) {
     throw new Error(`Modification impossible : ${error.message}`);
@@ -1147,11 +1026,12 @@ export async function updateComment(commentId: string, userId: string, content: 
 }
 
 export async function deleteComment(commentId: string, userId: string): Promise<void> {
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const { error } = await supabase
     .from('comments')
     .delete()
     .eq('id', commentId)
-    .eq('user_id', userId);
+    .eq('user_id', validUid);
 
   if (error) {
     throw new Error(`Suppression impossible : ${error.message}`);
@@ -1172,18 +1052,21 @@ export async function getFavoriteListingIds(userId: string): Promise<string[]> {
 }
 
 export async function toggleFavorite(userId: string, listingId: string): Promise<boolean> {
+  const validUid = await requireAuthenticatedSessionUid(userId);
   const { data: existing } = await supabase
     .from('favorites')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', validUid)
     .eq('listing_id', listingId)
     .maybeSingle();
 
   if (existing) {
-    await supabase.from('favorites').delete().eq('user_id', userId).eq('listing_id', listingId);
+    const { error } = await supabase.from('favorites').delete().eq('user_id', validUid).eq('listing_id', listingId);
+    if (error) throw new Error(`Impossible de retirer des favoris : ${error.message}`);
     return false;
   } else {
-    await supabase.from('favorites').insert({ user_id: userId, listing_id: listingId });
+    const { error } = await supabase.from('favorites').insert({ user_id: validUid, listing_id: listingId });
+    if (error) throw new Error(`Impossible d'ajouter aux favoris : ${error.message}`);
     return true;
   }
 }
@@ -1211,10 +1094,42 @@ export async function fetchConversations(currentUserId: string): Promise<Convers
 
   if (error) {
     console.error('fetchConversations error:', error.message);
-    return [];
+    throw new Error(`Impossible de charger vos discussions : ${error.message}`);
   }
 
-  return (data || []).map((c: any) => {
+  const convRows = data || [];
+  if (convRows.length === 0) return [];
+
+  const convIds = convRows.map((c: any) => c.id);
+  const unreadCounts: Record<string, number> = {};
+  const lastMessageMap: Record<string, { content: string; created_at: string; sender_id: string }> = {};
+
+  try {
+    const { data: msgRows } = await supabase
+      .from('messages')
+      .select('conversation_id, content, created_at, sender_id, read_at')
+      .in('conversation_id', convIds)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(500, convIds.length * 20));
+
+    for (const m of msgRows || []) {
+      const cid = (m as any).conversation_id;
+      if (!lastMessageMap[cid]) {
+        lastMessageMap[cid] = {
+          content: (m as any).content || '',
+          created_at: (m as any).created_at,
+          sender_id: (m as any).sender_id,
+        };
+      }
+      if ((m as any).sender_id !== currentUserId && !(m as any).read_at) {
+        unreadCounts[cid] = (unreadCounts[cid] || 0) + 1;
+      }
+    }
+  } catch (msgErr) {
+    console.warn('fetchConversations messages summary warning:', msgErr);
+  }
+
+  return convRows.map((c: any) => {
     const isUserA = c.user_a === currentUserId;
     const otherUser = isUserA ? c.user_b_profile : c.user_a_profile;
 
@@ -1230,9 +1145,26 @@ export async function fetchConversations(currentUserId: string): Promise<Convers
         id: isUserA ? c.user_b : c.user_a,
         full_name: 'Membre Afrique Business',
       },
-      unread_count: 0,
+      last_message: lastMessageMap[c.id] || null,
+      unread_count: unreadCounts[c.id] || 0,
     };
   });
+}
+
+export async function fetchUnreadMessagesTotal(currentUserId: string): Promise<number> {
+  if (!isValidUuid(currentUserId)) return 0;
+  try {
+    const { count, error } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .neq('sender_id', currentUserId)
+      .is('read_at', null);
+
+    if (error) return 0;
+    return count || 0;
+  } catch {
+    return 0;
+  }
 }
 
 export async function fetchMessages(
@@ -1251,7 +1183,16 @@ export async function fetchMessages(
     console.error('fetchMessages error:', error.message);
     return [];
   }
-  return (data || []) as MessageData[];
+
+  const rows = (data || []) as MessageData[];
+  const withFreshUrls = await Promise.all(
+    rows.map(async (msg) => {
+      if (!msg.image_url) return msg;
+      const freshUrl = await resolveChatSignedUrl(msg.image_url);
+      return freshUrl === msg.image_url ? msg : { ...msg, image_url: freshUrl };
+    })
+  );
+  return withFreshUrls;
 }
 
 export async function sendMessage(
@@ -1260,6 +1201,7 @@ export async function sendMessage(
   content: string,
   imageUrl?: string
 ): Promise<MessageData> {
+  const validUid = await requireAuthenticatedSessionUid(senderId);
   const safeContent = sanitizeText(content, 2000);
   const safeImageUrl = imageUrl ? sanitizeUrl(imageUrl) : null;
 
@@ -1267,7 +1209,7 @@ export async function sendMessage(
     .from('messages')
     .insert({
       conversation_id: conversationId,
-      sender_id: senderId,
+      sender_id: validUid,
       content: safeContent,
       image_url: safeImageUrl,
     })
@@ -1288,11 +1230,12 @@ export async function sendMessage(
 }
 
 export async function markConversationAsRead(conversationId: string, readerUserId: string): Promise<void> {
+  const validUid = await requireAuthenticatedSessionUid(readerUserId);
   await supabase
     .from('messages')
     .update({ read_at: new Date().toISOString() })
     .eq('conversation_id', conversationId)
-    .neq('sender_id', readerUserId)
+    .neq('sender_id', validUid)
     .is('read_at', null);
 }
 
@@ -1338,8 +1281,9 @@ export async function rpcDeleteMyAccount(): Promise<void> {
 // 8. BLOCKS & REPORTS & SUPPORT
 // ----------------------------------------------------
 export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  const validUid = await requireAuthenticatedSessionUid(blockerId);
   const { error } = await supabase.from('blocks').insert({
-    blocker_id: blockerId,
+    blocker_id: validUid,
     blocked_id: blockedId,
   });
   if (error) throw new Error(`Blocage impossible : ${error.message}`);
@@ -1355,7 +1299,9 @@ export async function getBlockedUserIds(userId: string): Promise<string[]> {
 }
 
 export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
-  await supabase.from('blocks').delete().eq('blocker_id', blockerId).eq('blocked_id', blockedId);
+  const validUid = await requireAuthenticatedSessionUid(blockerId);
+  const { error } = await supabase.from('blocks').delete().eq('blocker_id', validUid).eq('blocked_id', blockedId);
+  if (error) throw new Error(`Déblocage impossible : ${error.message}`);
 }
 
 export async function submitReport(report: {
@@ -1365,7 +1311,11 @@ export async function submitReport(report: {
   reason: string;
   details?: string;
 }): Promise<void> {
-  const { error } = await supabase.from('reports').insert(report);
+  const validUid = await requireAuthenticatedSessionUid(report.reporter_id);
+  const { error } = await supabase.from('reports').insert({
+    ...report,
+    reporter_id: validUid,
+  });
   if (error) throw new Error(`Signalement impossible : ${error.message}`);
 }
 
@@ -1375,8 +1325,10 @@ export async function submitSupportTicket(ticket: {
   subject: string;
   message: string;
 }): Promise<void> {
+  const validUid = await requireAuthenticatedSessionUid(ticket.user_id);
   const { error } = await supabase.from('support_tickets').insert({
     ...ticket,
+    user_id: validUid,
     status: 'open',
   });
   if (error) throw new Error(`Envoi impossible : ${error.message}`);

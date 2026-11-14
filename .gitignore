@@ -7,5 +7,6 @@ coverage/
 .env*
 !.env.example
 
-# Données sensibles : ne jamais publier
+# Données sensibles et sauvegardes locales : ne jamais publier
 data/user_credentials.json
+backups/

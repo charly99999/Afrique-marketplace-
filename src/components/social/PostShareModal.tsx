@@ -4,6 +4,8 @@ import {
   ExternalLink, CornerUpRight, ShieldCheck, Globe
 } from 'lucide-react';
 import { PostData } from '../../lib/supabaseData';
+import { appToast } from '../../lib/feedback';
+import { SafeImage, SafeAvatar } from '../SafeImage';
 
 interface PostShareModalProps {
   isOpen: boolean;
@@ -45,7 +47,7 @@ export const PostShareModal: React.FC<PostShareModalProps> = ({
       await onShareToFeed(commentary.trim());
       onClose();
     } catch (err: any) {
-      alert(`Erreur lors du partage : ${err.message || 'Échec de publication'}`);
+      appToast(`Erreur lors du partage : ${err.message || 'Échec de publication'}`, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -153,17 +155,13 @@ export const PostShareModal: React.FC<PostShareModalProps> = ({
             {/* Author sharing info */}
             {currentUserName && (
               <div className="flex items-center gap-2 pt-1">
-                {currentUserAvatar ? (
-                  <img
-                    src={currentUserAvatar}
-                    alt=""
-                    className="w-7 h-7 rounded-full object-cover border border-[#E5E8EF]"
-                  />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-[#172033] text-white font-bold text-[10px] flex items-center justify-center">
-                    {currentUserName[0]}
-                  </div>
-                )}
+                <SafeAvatar
+                  src={currentUserAvatar}
+                  alt={currentUserName}
+                  initials={currentUserName[0] || 'U'}
+                  className="w-7 h-7 rounded-full object-cover border border-[#E5E8EF]"
+                  fallbackClassName="w-7 h-7 rounded-full bg-[#172033] text-white font-bold text-[10px] flex items-center justify-center"
+                />
                 <span className="text-xs font-semibold text-[#172033]">
                   {currentUserName}
                 </span>
@@ -183,17 +181,13 @@ export const PostShareModal: React.FC<PostShareModalProps> = ({
             <div className="p-3 rounded-xl bg-white border border-[#E5E8EF] space-y-2 shadow-xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {post.author?.avatar_url ? (
-                    <img
-                      src={post.author.avatar_url}
-                      alt=""
-                      className="w-7 h-7 rounded-full object-cover border border-[#E5E8EF]"
-                    />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-[#C69A35] text-[#172033] font-bold text-[10px] flex items-center justify-center">
-                      {authorInitials}
-                    </div>
-                  )}
+                  <SafeAvatar
+                    src={post.author?.avatar_url}
+                    alt={authorName}
+                    initials={authorInitials}
+                    className="w-7 h-7 rounded-full object-cover border border-[#E5E8EF]"
+                    fallbackClassName="w-7 h-7 rounded-full bg-[#C69A35] text-[#172033] font-bold text-[10px] flex items-center justify-center"
+                  />
                   <div>
                     <span className="text-xs font-bold text-[#172033] flex items-center gap-1">
                       <span>{authorName}</span>
@@ -226,7 +220,7 @@ export const PostShareModal: React.FC<PostShareModalProps> = ({
                       key={idx}
                       className="w-16 h-16 rounded-lg overflow-hidden border border-[#E5E8EF] shrink-0"
                     >
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                      <SafeImage src={img} alt="Aperçu" className="w-full h-full object-cover" fallbackLabel="" />
                     </div>
                   ))}
                   {post.images.length > 3 && (

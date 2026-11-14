@@ -6,10 +6,11 @@ import { CategoryKey } from '../lib/supabaseData';
 import { CATEGORIES_LIST, CategoryGoldIcon } from '../data/categories';
 import { 
   Search, ShieldCheck, Share2, MapPin, Plus, 
-  Package, Grid, ArrowUpDown, Phone
+  Package, Grid, ArrowUpDown, Phone, AlertTriangle, RefreshCw, Zap
 } from 'lucide-react';
 import officialLogoImg from '../assets/images/logo_afrique_business_1792378287169.jpg';
 import { PWAInstallButton } from './PWAInstallButton';
+import { SafeImage } from './SafeImage';
 
 interface FeedViewProps {
   listings: Listing[];
@@ -18,6 +19,8 @@ interface FeedViewProps {
   viewerCurrency: string;
   dataSaver: boolean;
   searchQuery?: string;
+  listingsError?: string | null;
+  onRetryLoad?: () => void;
   onSelectListing: (listing: Listing) => void;
   onQuickSell: () => void;
   onOpenScopeModal: () => void;
@@ -28,7 +31,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
   currentCountry,
   scopeAllAfrica,
   viewerCurrency,
+  dataSaver,
   searchQuery: externalSearchQuery = '',
+  listingsError = null,
+  onRetryLoad,
   onSelectListing,
   onQuickSell,
   onOpenScopeModal,
@@ -257,6 +263,32 @@ export const FeedView: React.FC<FeedViewProps> = ({
         {/* PWA Install Banner */}
         <PWAInstallButton variant="banner" className="mb-4" />
 
+        {dataSaver && (
+          <div className="mb-4 px-3.5 py-2 rounded-xl bg-amber-50 border border-[#C69A35]/30 text-xs text-[#A27B20] flex items-center gap-2 font-semibold">
+            <Zap className="w-4 h-4 text-[#C69A35] shrink-0" />
+            <span>Mode Économie de données actif : aperçus optimisés pour les connexions mobiles.</span>
+          </div>
+        )}
+
+        {listingsError && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <span className="font-semibold">{listingsError}</span>
+            </div>
+            {onRetryLoad && (
+              <button
+                type="button"
+                onClick={onRetryLoad}
+                className="px-3.5 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Réessayer</span>
+              </button>
+            )}
+          </div>
+        )}
+
         {filteredListings.length === 0 ? (
           /* Clean Empty State */
           <div className="py-16 text-center space-y-4">
@@ -300,13 +332,11 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 >
                   {/* Media Thumbnail Container */}
                   <div className="relative aspect-4/3 w-full bg-[#F1F4F9] overflow-hidden">
-                    <img
-                      src={listing.images[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'}
+                    <SafeImage
+                      src={dataSaver ? undefined : listing.images[0]}
                       alt={listing.title}
                       loading="lazy"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-                      }}
+                      fallbackLabel={dataSaver && listing.images[0] ? 'Aperçu allégé (Économie)' : 'Photo indisponible'}
                       className="w-full h-full object-cover group-hover:scale-104 transition-transform duration-300"
                     />
 
