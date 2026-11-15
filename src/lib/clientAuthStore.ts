@@ -305,7 +305,7 @@ export function generateCandidateEmails(identifier: string): string[] {
   const cleanDigits = normalizePhoneDigits(trimmed);
   const candidatesSet = new Set<string>();
 
-  // If Marc Arnaud
+  // Admin account emails (supports logging in with backup email OR phone)
   if (
     cleanDigits === '2250565242349' ||
     cleanDigits === '0565242349' ||
@@ -313,45 +313,32 @@ export function generateCandidateEmails(identifier: string): string[] {
     cleanDigits.endsWith('565242349') ||
     trimmed === ADMIN_EMAIL.toLowerCase()
   ) {
-    candidatesSet.add(ADMIN_EMAIL);
-    candidatesSet.add('marcarnaudkonan@gmail.com');
+    if (trimmed === ADMIN_EMAIL.toLowerCase()) {
+      candidatesSet.add(ADMIN_EMAIL);
+      candidatesSet.add('phone2250565242349@afrique-business.app');
+      candidatesSet.add('auth_2250565242349@afrique-business.internal');
+    } else {
+      candidatesSet.add('phone2250565242349@afrique-business.app');
+      candidatesSet.add(ADMIN_EMAIL);
+    }
   }
 
-  // Generate digit variations (full, with country prefix, without country prefix, with leading 0)
-  const digitVariants = new Set<string>();
+  // Targeted digit variations actually used by register-user / Supabase signup
+  const digitVariants: string[] = [];
   if (cleanDigits) {
-    digitVariants.add(cleanDigits);
-
-    // If starts with 225 (Ivory Coast)
+    digitVariants.push(cleanDigits);
     if (cleanDigits.startsWith('225') && cleanDigits.length > 3) {
       const rest = cleanDigits.slice(3);
-      digitVariants.add(rest);
-      digitVariants.add('0' + rest);
+      digitVariants.push(rest.startsWith('0') ? rest : '0' + rest);
     } else if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
-      digitVariants.add('225' + cleanDigits);
-      digitVariants.add('225' + cleanDigits.slice(1));
-    } else if (cleanDigits.length === 8 || cleanDigits.length === 10) {
-      digitVariants.add('225' + cleanDigits);
+      digitVariants.push('225' + cleanDigits);
     }
   }
 
-  const domains = [
-    'afrique-business.internal',
-    'afrique-business.app',
-    'afrique-business.ci',
-    'afrique-business.com',
-    'afrique-afrique.com',
-  ];
-
-  for (const d of digitVariants) {
-    for (const dom of domains) {
-      candidatesSet.add(`auth_${d}@${dom}`);
-      candidatesSet.add(`user_${d}@${dom}`);
-      candidatesSet.add(`phone_${d}@${dom}`);
-      candidatesSet.add(`phone${d}@${dom}`);
-      candidatesSet.add(`${d}@${dom}`);
-      candidatesSet.add(`+${d}@${dom}`);
-    }
+  for (const d of digitVariants.slice(0, 2)) {
+    candidatesSet.add(`phone${d}@afrique-business.app`);
+    candidatesSet.add(`auth_${d}@afrique-business.internal`);
+    candidatesSet.add(`auth_${d}@afrique-business.app`);
   }
 
   return Array.from(candidatesSet);

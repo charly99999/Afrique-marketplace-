@@ -128,5 +128,11 @@ test('supabaseData.ts and AuthModal/App enforce signed chat URLs, search sanitiz
   assert.match(appCode, /refreshSession/);
   assert.match(authCode, /establishSupabaseSession/);
   assert.match(authCode, /verifyOtp/);
+  assert.match(authCode, /mode === 'SMS_LOGIN' &&[\s\S]*handleSMSLoginRequest/);
+  assert.match(authCode, /rateLimited/);
+  assert.match(authCode, /\/api\/auth\/capabilities/);
+  assert.match(authCode, /\/api\/auth\/request-recovery-email/);
+  assert.match(authCode, /supabaseSessionTokenHash/);
 });
+
 

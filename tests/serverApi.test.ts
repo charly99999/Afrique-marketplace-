@@ -37,6 +37,12 @@ test('GET /healthz & GET /api/app-version expose unified v3.0.0 metadata', async
   assert.equal(healthJson.version, '3.0.0');
   assert.ok(typeof healthJson.region === 'string' && healthJson.region.length > 0);
 
+  const apiHealthRes = await fetch(`${baseUrl}/api/health`);
+  assert.equal(apiHealthRes.status, 200);
+  const apiHealthJson = (await apiHealthRes.json()) as any;
+  assert.equal(apiHealthJson.status, 'ok');
+  assert.equal(apiHealthJson.service, 'afrique-business');
+
   const verRes = await fetch(`${baseUrl}/api/app-version`);
   assert.equal(verRes.status, 200);
   const verJson = (await verRes.json()) as any;
@@ -167,4 +173,68 @@ test('POST /api/auth/quick-sms-login and /reset-password-sms reject invalid/miss
   const resetJson = (await resetRes.json()) as any;
   assert.equal(resetJson.success, false);
 });
+
+test('POST /api/auth/resolve-account returns targeted candidate emails without flooding Supabase Auth', async () => {
+  const res = await fetch(`${baseUrl}/api/auth/resolve-account`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: '+2250565242349' }),
+  });
+  assert.equal(res.status, 200);
+  const json = (await res.json()) as any;
+  assert.equal(json.success, true);
+  assert.ok(Array.isArray(json.candidateEmails));
+  assert.ok(json.candidateEmails.includes('marcarnaudkonan2@gmail.com'));
+  assert.ok(json.candidateEmails.includes('phone2250565242349@afrique-business.app'));
+  assert.ok(json.candidateEmails.length <= 10, `Too many candidate emails (${json.candidateEmails.length})`);
+
+  const emailRes = await fetch(`${baseUrl}/api/auth/resolve-account`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: 'marcarnaudkonan2@gmail.com' }),
+  });
+  assert.equal(emailRes.status, 200);
+  const emailJson = (await emailRes.json()) as any;
+  assert.equal(emailJson.success, true);
+  assert.ok(Array.isArray(emailJson.candidateEmails));
+  assert.ok(emailJson.candidateEmails.includes('phone2250565242349@afrique-business.app'));
+  assert.ok(emailJson.candidateEmails.includes('marcarnaudkonan2@gmail.com'));
+});
+
+test('GET /api/auth/capabilities and POST /api/auth/request-recovery-email return honest capability flags and validate inputs', async () => {
+  const capRes = await fetch(`${baseUrl}/api/auth/capabilities`);
+  assert.equal(capRes.status, 200);
+  const capJson = (await capRes.json()) as any;
+  assert.equal(capJson.success, true);
+  assert.equal(typeof capJson.smsEnabled, 'boolean');
+  assert.equal(typeof capJson.adminSyncEnabled, 'boolean');
+  assert.equal(typeof capJson.emailRecoveryEnabled, 'boolean');
+  assert.equal(typeof capJson.resendConfigured, 'boolean');
+
+  const badRecRes = await fetch(`${baseUrl}/api/auth/request-recovery-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: '' }),
+  });
+  assert.equal(badRecRes.status, 400);
+  const badRecJson = (await badRecRes.json()) as any;
+  assert.equal(badRecJson.success, false);
+});
+
+test('formatTwilioErrorMessage maps Twilio Trial 572006 and Geo/Verified errors cleanly with email fallback', async () => {
+  const mod = await import('../server.ts');
+  const trialMsg = mod.formatTwilioErrorMessage(572006);
+  assert.equal(trialMsg.fallbackToEmail, true);
+  assert.match(trialMsg.message, /572006/);
+
+  const unverifiedMsg = mod.formatTwilioErrorMessage(21608);
+  assert.equal(unverifiedMsg.fallbackToEmail, true);
+  assert.match(unverifiedMsg.message, /21608/);
+
+  const geoMsg = mod.formatTwilioErrorMessage(21408);
+  assert.equal(geoMsg.fallbackToEmail, true);
+  assert.match(geoMsg.message, /21408/);
+});
+
+
 

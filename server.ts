@@ -143,6 +143,141 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref();
 
+export function formatTwilioErrorMessage(code?: number): { message: string; fallbackToEmail: boolean } {
+  switch (code) {
+    case 572006:
+      return {
+        message:
+          "Le compte Twilio est en mode Essai (code 572006) : Twilio bloque ce format de SMS. Activez un compte Twilio payant (ou Twilio Content Template) ou utilisez l’option « Par E-mail » ci-dessous.",
+        fallbackToEmail: true,
+      };
+    case 21608:
+      return {
+        message:
+          "Compte Twilio Essai (code 21608) : ce numéro n’est pas encore vérifié dans Twilio Verified Caller IDs. Utilisez « Par E-mail » ou passez votre compte Twilio en mode payant.",
+        fallbackToEmail: true,
+      };
+    case 21408:
+      return {
+        message:
+          "L’envoi de SMS vers cet indicatif pays n’est pas activé dans Twilio Geo Permissions (code 21408). Utilisez l’option « Par E-mail ».",
+        fallbackToEmail: true,
+      };
+    case 20003:
+      return {
+        message:
+          "Identifiants Twilio invalides (code 20003). Utilisez l’option « Par E-mail » en attendant la correction des clés Twilio.",
+        fallbackToEmail: true,
+      };
+    default:
+      return {
+        message:
+          "L’envoi du SMS a échoué temporairement. Veuillez utiliser la connexion ou réinitialisation par e-mail.",
+        fallbackToEmail: true,
+      };
+  }
+}
+
+const twilioAccountCache: {
+  checkedAt: number;
+  accountType: string | null;
+  trialTemplateBlockedUntil: number;
+} = {
+  checkedAt: 0,
+  accountType: null,
+  trialTemplateBlockedUntil: 0,
+};
+
+async function getTwilioCapabilities(): Promise<{
+  smsEnabled: boolean;
+  smsConfigured: boolean;
+  smsTrialRestricted: boolean;
+}> {
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+  const twilioContentSid = process.env.TWILIO_CONTENT_SID;
+  const allowDevSimulator =
+    process.env.ALLOW_DEV_OTP_SIMULATOR === 'true' && process.env.NODE_ENV !== 'production';
+
+  const smsConfigured = Boolean(twilioSid && twilioAuthToken && twilioFrom);
+  if (!smsConfigured) {
+    return {
+      smsEnabled: allowDevSimulator,
+      smsConfigured: false,
+      smsTrialRestricted: false,
+    };
+  }
+
+  if (allowDevSimulator || twilioContentSid) {
+    return {
+      smsEnabled: true,
+      smsConfigured: true,
+      smsTrialRestricted: false,
+    };
+  }
+
+  const now = Date.now();
+  if (now < twilioAccountCache.trialTemplateBlockedUntil) {
+    return {
+      smsEnabled: false,
+      smsConfigured: true,
+      smsTrialRestricted: true,
+    };
+  }
+
+  if (!twilioAccountCache.accountType || now - twilioAccountCache.checkedAt > 2 * 60 * 1000) {
+    try {
+      const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
+      const accRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}.json`, {
+        method: 'GET',
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (accRes.ok) {
+        const accJson = (await accRes.json()) as { type?: string };
+        twilioAccountCache.accountType = accJson?.type || null;
+        twilioAccountCache.checkedAt = now;
+      }
+    } catch {
+      // Leave cached state unchanged on transient network failure
+    }
+  }
+
+  const isTrialWithoutTemplate = twilioAccountCache.accountType === 'Trial';
+  return {
+    smsEnabled: !isTrialWithoutTemplate,
+    smsConfigured: true,
+    smsTrialRestricted: isTrialWithoutTemplate,
+  };
+}
+
+async function sendTwilioMessage(
+  twilioSid: string,
+  twilioAuthToken: string,
+  params: URLSearchParams
+): Promise<{ ok: boolean; status: number; rawText: string; parsedCode?: number }> {
+  const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
+  const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      'Authorization': authHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+    signal: AbortSignal.timeout(12000),
+  });
+  const rawText = await twilioRes.text();
+  let parsedCode: number | undefined;
+  try {
+    const parsed = JSON.parse(rawText);
+    if (typeof parsed?.code === 'number') parsedCode = parsed.code;
+  } catch {
+    // non-JSON response
+  }
+  return { ok: twilioRes.ok, status: twilioRes.status, rawText, parsedCode };
+}
+
 // ----------------------------------------------------
 // 1. Twilio / Pan-African Gateway SMS OTP Authentication
 // ----------------------------------------------------
@@ -210,31 +345,54 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
     const twilioSid = process.env.TWILIO_ACCOUNT_SID;
     const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
     const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+    const twilioContentSid = process.env.TWILIO_CONTENT_SID;
 
     const allowDevSimulator =
       process.env.ALLOW_DEV_OTP_SIMULATOR === 'true' && process.env.NODE_ENV !== 'production';
 
     if (twilioSid && twilioAuthToken && twilioFrom) {
-      // Send real SMS via Twilio API
-      const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
+      if (!twilioContentSid && !allowDevSimulator && Date.now() < twilioAccountCache.trialTemplateBlockedUntil) {
+        otpStore.delete(cleanPhone);
+        const mapped = formatTwilioErrorMessage(572006);
+        return res.status(503).json({
+          success: false,
+          twilioCode: 572006,
+          fallbackToEmail: mapped.fallbackToEmail,
+          message: mapped.message,
+        });
+      }
+
+      const toFormatted = cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`;
       const params = new URLSearchParams();
-      params.append('To', cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`);
+      params.append('To', toFormatted);
       params.append('From', twilioFrom);
-      params.append('Body', `Votre code de vérification Afrique Business est : ${code}. Valide pendant 5 minutes. Ne le communiquez à personne.`);
+      if (twilioContentSid) {
+        params.append('ContentSid', twilioContentSid);
+        params.append('ContentVariables', JSON.stringify({ '1': code }));
+      } else {
+        params.append('Body', `Votre code de vérification Afrique Business est : ${code}. Valide pendant 5 minutes. Ne le communiquez à personne.`);
+      }
 
-      const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
-        method: 'POST',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-        signal: AbortSignal.timeout(12000),
-      });
+      let twilioAttempt = await sendTwilioMessage(twilioSid, twilioAuthToken, params);
 
-      if (!twilioRes.ok) {
-        const twilioErr = await twilioRes.text();
-        console.warn('[Twilio Error] SMS delivery failed:', twilioErr);
+      // Twilio Trial (572006): automatically retry once using standard concise verification phrasing
+      if (!twilioAttempt.ok && twilioAttempt.parsedCode === 572006 && !twilioContentSid) {
+        const retryParams = new URLSearchParams();
+        retryParams.append('To', toFormatted);
+        retryParams.append('From', twilioFrom);
+        retryParams.append('Body', `Your verification code is: ${code}`);
+        twilioAttempt = await sendTwilioMessage(twilioSid, twilioAuthToken, retryParams);
+      }
+
+      if (!twilioAttempt.ok) {
+        if (twilioAttempt.parsedCode === 572006) {
+          twilioAccountCache.accountType = 'Trial';
+          twilioAccountCache.checkedAt = Date.now();
+          twilioAccountCache.trialTemplateBlockedUntil = Date.now() + 10 * 60 * 1000;
+          console.log('[Auth] Twilio trial account requires predefined templates; advising email flow.');
+        } else {
+          console.log(`[Auth] Twilio delivery unavailable (status=${twilioAttempt.status}, code=${twilioAttempt.parsedCode ?? 'unknown'}).`);
+        }
         if (allowDevSimulator) {
           return res.json({
             success: true,
@@ -244,9 +402,12 @@ app.post('/api/auth/send-sms-otp', async (req, res) => {
           });
         }
         otpStore.delete(cleanPhone);
+        const mapped = formatTwilioErrorMessage(twilioAttempt.parsedCode);
         return res.status(503).json({
           success: false,
-          message: 'L’envoi du SMS a échoué temporairement. Veuillez utiliser la connexion ou réinitialisation par e-mail.',
+          twilioCode: twilioAttempt.parsedCode,
+          fallbackToEmail: mapped.fallbackToEmail,
+          message: mapped.message,
         });
       }
 
@@ -382,17 +543,93 @@ async function verifyRequestSupabaseUser(req: express.Request) {
   }
 }
 
+function getNormalizedPhoneVariants(phoneInput: string): { cleanDigits: string; variants: string[] } {
+  const cleanDigits = String(phoneInput || '').replace(/[^\d]/g, '');
+  const digitVariants = new Set<string>();
+  if (cleanDigits.length >= 8) {
+    digitVariants.add(cleanDigits);
+    if (cleanDigits.startsWith('225') && cleanDigits.length > 3) {
+      const rest = cleanDigits.slice(3);
+      digitVariants.add(rest.startsWith('0') ? rest : '0' + rest);
+    } else if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
+      digitVariants.add('225' + cleanDigits);
+    }
+  }
+  const allVariants = Array.from(digitVariants).flatMap((d) => [d, `+${d}`]);
+  return { cleanDigits, variants: allVariants };
+}
+
+async function resolveSupabaseUserByPhone(phoneInput: string): Promise<{
+  user: any;
+  profile: { full_name?: string; city?: string; country?: string; avatar_url?: string } | null;
+} | null> {
+  if (!supabaseAdmin) return null;
+  const { cleanDigits, variants } = getNormalizedPhoneVariants(phoneInput);
+  if (cleanDigits.length < 8) return null;
+
+  try {
+    // 1. Fast indexed lookup via profile_private
+    const { data: privMatch } = await supabaseAdmin
+      .from('profile_private')
+      .select('id')
+      .in('phone', variants)
+      .limit(1)
+      .maybeSingle();
+
+    if (privMatch?.id) {
+      const { data: authRecord } = await supabaseAdmin.auth.admin.getUserById(privMatch.id);
+      if (authRecord?.user) {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('full_name, city, country, avatar_url')
+          .eq('id', privMatch.id)
+          .maybeSingle();
+        return { user: authRecord.user, profile: prof || null };
+      }
+    }
+
+    // 2. Authoritative scan across auth.users (handles legacy accounts without profile_private row)
+    const normalizedSuffix = cleanDigits.slice(-8);
+    for (let page = 1; page <= 3; page++) {
+      const { data: pageData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+      const users = pageData?.users || [];
+      const matched = users.find((u) => {
+        const uPhoneDigits = String(u.phone || '').replace(/[^\d]/g, '');
+        const metaPhoneDigits = String(u.user_metadata?.phone || '').replace(/[^\d]/g, '');
+        const emailLocal = String(u.email || '').split('@')[0].replace(/[^\d]/g, '');
+        return (
+          (uPhoneDigits.length >= 8 && (uPhoneDigits === cleanDigits || uPhoneDigits.endsWith(normalizedSuffix))) ||
+          (metaPhoneDigits.length >= 8 && (metaPhoneDigits === cleanDigits || metaPhoneDigits.endsWith(normalizedSuffix))) ||
+          (emailLocal.length >= 8 && (emailLocal === cleanDigits || emailLocal.endsWith(normalizedSuffix)))
+        );
+      });
+      if (matched) {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('full_name, city, country, avatar_url')
+          .eq('id', matched.id)
+          .maybeSingle();
+        return { user: matched, profile: prof || null };
+      }
+      if (users.length < 200) break;
+    }
+  } catch (err) {
+    console.warn('[Auth] resolveSupabaseUserByPhone warning:', err);
+  }
+  return null;
+}
+
 const SERVER_START_TIME = Date.now();
 const APP_VERSION = '3.0.0';
 const COMMIT_SHA = process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || 'local';
 
-// Cloud Run / Docker / Uptime healthcheck
-app.get('/healthz', (_req, res) => {
+// Cloud Run / Vercel / Docker / Uptime healthcheck
+app.get(['/healthz', '/api/health'], (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({
     status: 'ok',
     service: 'afrique-business',
-    region: process.env.CLOUD_RUN_REGION || process.env.K_REVISION ? 'europe-west2' : 'local',
+    region: process.env.CLOUD_RUN_REGION || process.env.K_REVISION ? 'europe-west2' : (process.env.VERCEL ? 'vercel' : 'local'),
     environment: process.env.NODE_ENV || 'development',
     version: APP_VERSION,
     commitSha: COMMIT_SHA,
@@ -406,6 +643,23 @@ app.get('/api/config', (_req, res) => {
   res.json({
     supabaseUrl,
     supabaseAnonKey,
+  });
+});
+
+// Expose non-sensitive authentication & recovery capabilities so UI never misleads users
+app.get('/api/auth/capabilities', async (_req, res) => {
+  const twilioCaps = await getTwilioCapabilities();
+  const adminSyncEnabled = Boolean(supabaseAdmin);
+  const emailRecoveryEnabled = Boolean(process.env.RESEND_API_KEY) || Boolean(supabaseUrl && supabaseAnonKey);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    success: true,
+    smsEnabled: twilioCaps.smsEnabled,
+    smsConfigured: twilioCaps.smsConfigured,
+    smsTrialRestricted: twilioCaps.smsTrialRestricted,
+    adminSyncEnabled,
+    emailRecoveryEnabled,
+    resendConfigured: Boolean(process.env.RESEND_API_KEY),
   });
 });
 
@@ -430,6 +684,21 @@ app.post('/api/auth/login-with-password', async (req, res) => {
     const result = verifyUserLogin(identifier, password);
     if (result.success && result.user) {
       const u = result.user;
+      let resolvedAuthEmail = u.email;
+      // Self-heal Supabase Auth password if local credential store has a valid match
+      if (supabaseAdmin) {
+        try {
+          const { data: authRec } = await supabaseAdmin.auth.admin.getUserById(u.userId);
+          if (authRec?.user?.email) {
+            resolvedAuthEmail = authRec.user.email;
+          }
+          await supabaseAdmin.auth.admin.updateUserById(u.userId, {
+            password: String(password),
+          });
+        } catch {
+          // non-blocking self-heal
+        }
+      }
       const nameParts = (u.fullName || 'Utilisateur').split(' ');
       return res.json({
         success: true,
@@ -439,7 +708,7 @@ app.post('/api/auth/login-with-password', async (req, res) => {
           firstName: nameParts[0] || u.fullName,
           lastName: nameParts.slice(1).join(' ') || '',
           phone: u.phone,
-          email: u.email,
+          email: resolvedAuthEmail,
           city: u.city || 'Abidjan',
           country: u.country || 'CI',
           avatarUrl: u.avatarUrl,
@@ -518,10 +787,28 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
     // Code is valid - consume it
     otpStore.delete(cleanPhone);
 
-    // Find existing user or seed
+    // Find existing user in authoritative Supabase Auth first, then local store
+    const supaResolved = await resolveSupabaseUserByPhone(cleanPhone);
     let userCred = findUserCredential(cleanPhone);
-    const isNewPhoneUser = !userCred;
-    if (!userCred) {
+    const isNewPhoneUser = !supaResolved && !userCred;
+
+    if (supaResolved?.user) {
+      const su = supaResolved.user;
+      const prof = supaResolved.profile;
+      userCred = {
+        userId: su.id,
+        phone: cleanPhone,
+        email: su.email || `auth_${cleanDigits}@afrique-business.internal`,
+        fullName: prof?.full_name || (su.user_metadata?.full_name as string) || userCred?.fullName || 'Membre ' + cleanPhone.slice(-4),
+        passwordHash: userCred?.passwordHash || '',
+        city: prof?.city || (su.user_metadata?.city as string) || userCred?.city || 'Abidjan',
+        country: prof?.country || (su.user_metadata?.country as string) || userCred?.country || 'CI',
+        avatarUrl: prof?.avatar_url || userCred?.avatarUrl,
+        phoneVerified: true,
+        createdAt: su.created_at || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } else if (!userCred) {
       if (cleanDigits === '2250565242349' || cleanDigits === '0565242349' || cleanDigits === '565242349') {
         userCred = getOrSeedAdminUser();
       } else {
@@ -557,6 +844,17 @@ app.post('/api/auth/quick-sms-login', async (req, res) => {
               country: userCred.country || 'CI',
               phone: cleanPhone,
             },
+          });
+          await supabaseAdmin.from('profiles').upsert({
+            id: userCred.userId,
+            full_name: userCred.fullName,
+            city: userCred.city || 'Abidjan',
+            country: userCred.country || 'CI',
+            phone_verified: true,
+          });
+          await supabaseAdmin.from('profile_private').upsert({
+            id: userCred.userId,
+            phone: cleanPhone,
           });
         }
         const effectiveEmail = existingAuth?.user?.email || targetEmail;
@@ -664,9 +962,10 @@ app.post('/api/auth/register-user', async (req, res) => {
     // Consume OTP on success
     otpStore.delete(cleanPhone);
 
-    // Prevent account overwrite if phone already registered
+    // Prevent account overwrite if phone already registered (check Supabase AND local store)
+    const existingSupa = await resolveSupabaseUserByPhone(cleanPhone);
     const existingCred = findUserCredential(cleanPhone);
-    if (existingCred) {
+    if (existingSupa || existingCred) {
       return res.status(409).json({
         success: false,
         message: 'Un compte existe déjà avec ce numéro de téléphone. Veuillez vous connecter ou réinitialiser votre mot de passe.',
@@ -691,7 +990,7 @@ app.post('/api/auth/register-user', async (req, res) => {
 
     const userId = userCred.userId;
 
-    // 2. If admin client is available, create verified Supabase Auth user
+    // 2. If admin client is available, create verified Supabase Auth user + profiles
     let supabaseSynced = false;
     if (supabaseAdmin) {
       try {
@@ -711,6 +1010,17 @@ app.post('/api/auth/register-user', async (req, res) => {
         });
         if (!adminCreateErr) {
           supabaseSynced = true;
+          await supabaseAdmin.from('profiles').upsert({
+            id: userId,
+            full_name: cleanFullName,
+            city: cleanCity,
+            country: cleanCountry,
+            phone_verified: true,
+          });
+          await supabaseAdmin.from('profile_private').upsert({
+            id: userId,
+            phone: cleanPhone,
+          });
         }
       } catch (adminErr) {
         console.warn('Admin auth creation warning:', adminErr);
@@ -805,9 +1115,27 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
     // Code is valid - consume it
     otpStore.delete(cleanPhone);
 
-    // Find user or seed
+    // Find authoritative account in Supabase first, then local store
+    const supaResolved = await resolveSupabaseUserByPhone(cleanPhone);
     let userCred = findUserCredential(cleanPhone);
-    if (!userCred) {
+
+    if (supaResolved?.user) {
+      const su = supaResolved.user;
+      const prof = supaResolved.profile;
+      userCred = {
+        userId: su.id,
+        phone: cleanPhone,
+        email: su.email || userCred?.email || `auth_${cleanDigits}@afrique-business.internal`,
+        fullName: prof?.full_name || (su.user_metadata?.full_name as string) || userCred?.fullName || 'Utilisateur',
+        passwordHash: userCred?.passwordHash || '',
+        city: prof?.city || (su.user_metadata?.city as string) || userCred?.city || 'Abidjan',
+        country: prof?.country || (su.user_metadata?.country as string) || userCred?.country || 'CI',
+        avatarUrl: prof?.avatar_url || userCred?.avatarUrl,
+        phoneVerified: true,
+        createdAt: su.created_at || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } else if (!userCred) {
       if (cleanDigits === '2250565242349' || cleanDigits === '0565242349' || cleanDigits === '565242349') {
         userCred = getOrSeedAdminUser();
       } else {
@@ -815,29 +1143,66 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
       }
     }
 
-    // Update password in credentials store
-    setUserPassword(userCred.userId, newPassword);
+    // Require strict Supabase Auth password update so credentials never desynchronize again
+    if (!supabaseAdmin) {
+      return res.status(503).json({
+        success: false,
+        supabaseSynced: false,
+        message: 'La réinitialisation SMS nécessite le service Supabase Admin configuré sur le serveur. Utilisez la réinitialisation « Par E-mail ».',
+      });
+    }
 
-    // If supabaseAdmin is configured, also update Supabase Auth
-    let supabaseSynced = false;
-    if (supabaseAdmin) {
+    const { error: adminUpdErr } = await supabaseAdmin.auth.admin.updateUserById(userCred.userId, {
+      password: newPassword,
+    });
+
+    if (adminUpdErr) {
+      console.error('Supabase admin update password error:', adminUpdErr);
+      return res.status(503).json({
+        success: false,
+        supabaseSynced: false,
+        message: 'Impossible de synchroniser le nouveau mot de passe avec Supabase Auth. Veuillez utiliser « Par E-mail ».',
+      });
+    }
+
+    // Update local fallback store as secondary cache only after Supabase succeeded
+    try {
+      setUserPassword(userCred.userId, newPassword);
+    } catch {
+      registerUserCredential({
+        userId: userCred.userId,
+        phone: userCred.phone,
+        email: userCred.email,
+        fullName: userCred.fullName,
+        password: newPassword,
+        city: userCred.city,
+        country: userCred.country,
+        avatarUrl: userCred.avatarUrl,
+      });
+    }
+
+    // Generate immediate verified Supabase session token_hash so login succeeds cleanly
+    let supabaseSessionTokenHash: string | null = null;
+    if (userCred.email) {
       try {
-        const { error: adminUpdErr } = await supabaseAdmin.auth.admin.updateUserById(userCred.userId, {
-          password: newPassword,
+        const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+          type: 'magiclink',
+          email: userCred.email,
         });
-        if (!adminUpdErr) {
-          supabaseSynced = true;
+        if (!linkErr && linkData?.properties?.hashed_token) {
+          supabaseSessionTokenHash = linkData.properties.hashed_token;
         }
-      } catch (adminErr) {
-        console.warn('Supabase admin update password warning:', adminErr);
+      } catch (linkWarn) {
+        console.warn('Reset SMS magiclink warning:', linkWarn);
       }
     }
 
     const nameParts = (userCred.fullName || 'Utilisateur').split(' ');
     return res.json({
       success: true,
-      supabaseSynced,
-      message: 'Votre mot de passe a été réinitialisé avec succès ! Vous êtes maintenant connecté.',
+      supabaseSynced: true,
+      supabaseSessionTokenHash,
+      message: 'Votre mot de passe a été réinitialisé et synchronisé avec succès ! Vous êtes maintenant connecté.',
       user: {
         id: userCred.userId,
         fullName: userCred.fullName,
@@ -862,7 +1227,7 @@ app.post('/api/auth/reset-password-sms', async (req, res) => {
   }
 });
 
-// 5. Change Password (Authenticated via verified Supabase JWT)
+// 5. Change Password (Authenticated via verified Supabase JWT - works seamlessly on Vercel & Cloud Run)
 app.post('/api/auth/change-password', async (req, res) => {
   try {
     const authUser = await verifyRequestSupabaseUser(req);
@@ -870,7 +1235,7 @@ app.post('/api/auth/change-password', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Authentification requise (session expirée).' });
     }
 
-    const { userId, oldPassword, newPassword } = req.body || {};
+    const { userId, oldPassword, newPassword, fromRecovery } = req.body || {};
     if (!newPassword || String(newPassword).length < 6 || String(newPassword).length > 100) {
       return res.status(400).json({ success: false, message: 'Nouveau mot de passe requis (6 à 100 caractères).' });
     }
@@ -881,10 +1246,29 @@ app.post('/api/auth/change-password', async (req, res) => {
 
     const targetUid = authUser.id;
     const userCred = findUserCredential(targetUid);
-    if (userCred?.passwordHash) {
-      if (!oldPassword || !verifyPassword(String(oldPassword), userCred.passwordHash)) {
+
+    if (!fromRecovery) {
+      if (!oldPassword) {
+        return res.status(400).json({ success: false, message: 'Ancien mot de passe requis.' });
+      }
+      let oldPasswordVerified = false;
+      if (userCred?.passwordHash && verifyPassword(String(oldPassword), userCred.passwordHash)) {
+        oldPasswordVerified = true;
+      } else if (authUser.email) {
+        const { error: reauthErr } = await supabaseAnonClient.auth.signInWithPassword({
+          email: authUser.email,
+          password: String(oldPassword),
+        });
+        if (!reauthErr) {
+          oldPasswordVerified = true;
+        }
+      }
+      if (!oldPasswordVerified) {
         return res.status(400).json({ success: false, message: 'Ancien mot de passe incorrect.' });
       }
+    }
+
+    if (userCred) {
       setUserPassword(targetUid, String(newPassword));
     } else {
       registerUserCredential({
@@ -924,7 +1308,7 @@ app.post('/api/auth/resolve-account', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Identifiant requis.' });
     }
 
-    const trimmed = identifier.trim().toLowerCase();
+    const trimmed = String(identifier).trim().toLowerCase();
     const cleanDigits = trimmed.replace(/[^\d]/g, '');
 
     // Check if user has an account in our credentials store
@@ -935,6 +1319,62 @@ app.post('/api/auth/resolve-account', async (req, res) => {
       candidateEmailsSet.add(trimmed);
     }
 
+    const digitVariants = new Set<string>();
+    if (cleanDigits.length >= 8) {
+      digitVariants.add(cleanDigits);
+      if (cleanDigits.startsWith('225') && cleanDigits.length > 3) {
+        const rest = cleanDigits.slice(3);
+        digitVariants.add(rest.startsWith('0') ? rest : '0' + rest);
+      } else if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
+        digitVariants.add('225' + cleanDigits);
+      }
+    }
+
+    // Resolve authoritative email from Supabase Auth FIRST (supports BOTH phone and contact_email logins)
+    if (supabaseAdmin) {
+      let resolvedAuthEmail: string | null = null;
+      if (cleanDigits.length >= 8 && !trimmed.includes('@')) {
+        const resolved = await resolveSupabaseUserByPhone(trimmed);
+        if (resolved?.user?.email) {
+          resolvedAuthEmail = String(resolved.user.email).toLowerCase();
+        }
+      } else if (trimmed.includes('@')) {
+        if (trimmed === ADMIN_EMAIL.toLowerCase()) {
+          const { data: adminAuth } = await supabaseAdmin.auth.admin.getUserById(ADMIN_USER_ID);
+          if (adminAuth?.user?.email) {
+            resolvedAuthEmail = String(adminAuth.user.email).toLowerCase();
+          }
+        }
+        if (!resolvedAuthEmail) {
+          for (let page = 1; page <= 3; page++) {
+            const { data: pageData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+            const users = pageData?.users || [];
+            const matched = users.find(
+              (u) =>
+                u.email?.toLowerCase() === trimmed ||
+                String(u.user_metadata?.contact_email || '').toLowerCase() === trimmed
+            );
+            if (matched?.email) {
+              resolvedAuthEmail = String(matched.email).toLowerCase();
+              break;
+            }
+            if (users.length < 200) break;
+          }
+        }
+      }
+
+      if (resolvedAuthEmail) {
+        const prev = Array.from(candidateEmailsSet);
+        candidateEmailsSet.clear();
+        candidateEmailsSet.add(resolvedAuthEmail);
+        for (const p of prev) candidateEmailsSet.add(p);
+      }
+    }
+
+    if (localUser?.email) {
+      candidateEmailsSet.add(localUser.email);
+    }
+
     if (
       cleanDigits === '2250565242349' ||
       cleanDigits === '0565242349' ||
@@ -942,43 +1382,14 @@ app.post('/api/auth/resolve-account', async (req, res) => {
       cleanDigits.endsWith('565242349') ||
       trimmed === ADMIN_EMAIL.toLowerCase()
     ) {
+      candidateEmailsSet.add('phone2250565242349@afrique-business.app');
       candidateEmailsSet.add(ADMIN_EMAIL);
-      candidateEmailsSet.add('marcarnaudkonan@gmail.com');
     }
 
-    const digitVariants = new Set<string>();
-    if (cleanDigits.length >= 8) {
-      digitVariants.add(cleanDigits);
-      if (cleanDigits.startsWith('225') && cleanDigits.length > 3) {
-        digitVariants.add(cleanDigits.slice(3));
-        digitVariants.add('0' + cleanDigits.slice(3));
-      } else if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
-        digitVariants.add('225' + cleanDigits);
-        digitVariants.add('225' + cleanDigits.slice(1));
-      }
-    }
-
-    const domains = [
-      'afrique-business.internal',
-      'afrique-business.app',
-      'afrique-business.ci',
-      'afrique-business.com',
-      'afrique-afrique.com',
-    ];
-
-    for (const d of digitVariants) {
-      for (const dom of domains) {
-        candidateEmailsSet.add(`auth_${d}@${dom}`);
-        candidateEmailsSet.add(`user_${d}@${dom}`);
-        candidateEmailsSet.add(`phone_${d}@${dom}`);
-        candidateEmailsSet.add(`phone${d}@${dom}`);
-        candidateEmailsSet.add(`${d}@${dom}`);
-        candidateEmailsSet.add(`+${d}@${dom}`);
-      }
-    }
-
-    if (localUser?.email) {
-      candidateEmailsSet.add(localUser.email);
+    for (const d of Array.from(digitVariants).slice(0, 2)) {
+      candidateEmailsSet.add(`phone${d}@afrique-business.app`);
+      candidateEmailsSet.add(`auth_${d}@afrique-business.internal`);
+      candidateEmailsSet.add(`auth_${d}@afrique-business.app`);
     }
 
     const candidateEmails = Array.from(candidateEmailsSet);
@@ -993,6 +1404,169 @@ app.post('/api/auth/resolve-account', async (req, res) => {
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 7. Request Email Recovery Link (Supports both real-email accounts AND legacy phone accounts with backup email)
+app.post('/api/auth/request-recovery-email', async (req, res) => {
+  try {
+    const { identifier, redirectTo } = req.body || {};
+    if (!identifier || !String(identifier).trim()) {
+      return res.status(400).json({ success: false, message: 'Adresse e-mail ou numéro de téléphone requis.' });
+    }
+
+    const clientIp = getClientIp(req);
+    if (!checkRateLimit(`ip_recovery_email_${clientIp}`, 10, 15 * 60 * 1000)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Trop de demandes de récupération. Veuillez patienter 15 minutes.',
+      });
+    }
+
+    const trimmed = String(identifier).trim().toLowerCase();
+    const cleanDigits = trimmed.replace(/[^\d]/g, '');
+    const safeRedirect = typeof redirectTo === 'string' && redirectTo.startsWith('http')
+      ? redirectTo
+      : `${process.env.APP_URL || 'https://afrique-afrique.com'}/#reset-password`;
+
+    const isSyntheticEmail = (em: string) =>
+      em.endsWith('@afrique-business.internal') || em.endsWith('@afrique-business.app');
+
+    let targetAuthUser: any = null;
+    let deliveryEmail: string | null = null;
+
+    if (supabaseAdmin) {
+      if (cleanDigits.length >= 8 && !trimmed.includes('@')) {
+        const resolved = await resolveSupabaseUserByPhone(trimmed);
+        targetAuthUser = resolved?.user || null;
+      } else if (trimmed.includes('@')) {
+        if (trimmed === ADMIN_EMAIL.toLowerCase()) {
+          const { data: adminAuth } = await supabaseAdmin.auth.admin.getUserById(ADMIN_USER_ID);
+          targetAuthUser = adminAuth?.user || null;
+        }
+        if (!targetAuthUser) {
+          for (let page = 1; page <= 3; page++) {
+            const { data: pageData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+            const users = pageData?.users || [];
+            targetAuthUser = users.find(
+              (u) =>
+                u.email?.toLowerCase() === trimmed ||
+                String(u.user_metadata?.contact_email || '').toLowerCase() === trimmed
+            );
+            if (targetAuthUser || users.length < 200) break;
+          }
+        }
+      }
+
+      if (targetAuthUser?.email) {
+        if (!isSyntheticEmail(targetAuthUser.email.toLowerCase())) {
+          deliveryEmail = targetAuthUser.email;
+        } else if (
+          typeof targetAuthUser.user_metadata?.contact_email === 'string' &&
+          isValidEmail(targetAuthUser.user_metadata.contact_email)
+        ) {
+          deliveryEmail = targetAuthUser.user_metadata.contact_email;
+        } else if (targetAuthUser.id === ADMIN_USER_ID) {
+          deliveryEmail = ADMIN_EMAIL;
+        }
+      }
+    }
+
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+
+    // Branch A: Admin + Resend configured -> generate official Supabase recovery link and deliver to verified contact email
+    if (supabaseAdmin && targetAuthUser?.email && deliveryEmail && resendApiKey) {
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: targetAuthUser.email,
+        options: { redirectTo: safeRedirect },
+      });
+
+      const actionLink = linkData?.properties?.action_link;
+      if (linkErr || !actionLink) {
+        return res.status(503).json({
+          success: false,
+          message: "Impossible de générer le lien de réinitialisation sécurisé pour ce compte.",
+        });
+      }
+
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: [deliveryEmail],
+          subject: 'Réinitialisation de votre mot de passe — Afrique Business',
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border: 1px solid #E5E8EF; border-radius: 16px; padding: 24px; color: #172033;">
+              <h2 style="margin: 0 0 12px 0; color: #172033;">Réinitialisation de mot de passe</h2>
+              <p style="font-size: 14px; line-height: 1.5; color: #596273;">Cliquez sur le bouton ci-dessous pour définir un nouveau mot de passe sur Afrique Business :</p>
+              <div style="margin: 24px 0; text-align: center;">
+                <a href="${actionLink}" style="background: #C69A35; color: #172033; padding: 12px 24px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block;">Définir mon nouveau mot de passe</a>
+              </div>
+              <p style="font-size: 12px; color: #596273;">Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail.</p>
+            </div>
+          `,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+
+      if (!resendRes.ok) {
+        return res.status(503).json({
+          success: false,
+          message: "L'envoi de l'e-mail de récupération a échoué temporairement.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        channel: 'resend',
+        message: 'Si un compte est associé à cet identifiant, un lien de réinitialisation vient d’être envoyé à votre adresse e-mail de secours.',
+      });
+    }
+
+    // Branch B: Direct real email in Supabase Auth via native Supabase mailer
+    if (targetAuthUser?.email && isSyntheticEmail(targetAuthUser.email.toLowerCase()) && !resendApiKey) {
+      return res.status(503).json({
+        success: false,
+        message: "Ce compte utilise un identifiant téléphonique interne : l'envoi d'un lien par e-mail nécessite la configuration de Resend sur le serveur, ou la réinitialisation par SMS Twilio.",
+      });
+    }
+
+    if (trimmed.includes('@') && !isSyntheticEmail(trimmed)) {
+      const emailToReset =
+        targetAuthUser?.email && !isSyntheticEmail(targetAuthUser.email.toLowerCase())
+          ? targetAuthUser.email
+          : trimmed;
+      const { error: resetErr } = await supabaseAnonClient.auth.resetPasswordForEmail(emailToReset, {
+        redirectTo: safeRedirect,
+      });
+      if (resetErr) {
+        return res.status(resetErr.status === 429 ? 429 : 400).json({
+          success: false,
+          message: resetErr.message.includes('rate limit')
+            ? "Limite d'envoi d'e-mails atteinte temporairement. Veuillez patienter avant de réessayer."
+            : `Impossible d'envoyer le lien : ${resetErr.message}`,
+        });
+      }
+      return res.json({
+        success: true,
+        channel: 'supabase_email',
+        message: `Un lien sécurisé de réinitialisation a été envoyé à ${trimmed}.`,
+      });
+    }
+
+    return res.status(503).json({
+      success: false,
+      message: "La récupération par e-mail pour un compte créé uniquement par numéro de téléphone nécessite la configuration de la passerelle SMS Twilio ou Resend sur le serveur.",
+    });
+  } catch (error: any) {
+    console.error('Error in /api/auth/request-recovery-email:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Erreur lors de la demande de récupération.' });
   }
 });
 

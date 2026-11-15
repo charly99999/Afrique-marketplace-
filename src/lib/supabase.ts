@@ -25,10 +25,19 @@ export const isSupabaseConfigured = true;
 /**
  * Send SMS OTP strictly via backend API (no fake client-side OTP bypass).
  */
-export async function sendSMSOTP(phone: string): Promise<{ success: boolean; message: string; simulated?: boolean; otp?: string }> {
+export async function sendSMSOTP(
+  phone: string
+): Promise<{ success: boolean; message: string; simulated?: boolean; otp?: string; twilioCode?: number; fallbackToEmail?: boolean }> {
   try {
     const clean = phone.trim();
-    const res = await safeFetchJson<{ success: boolean; message: string; simulated?: boolean; otp?: string }>('/api/auth/send-sms-otp', {
+    const res = await safeFetchJson<{
+      success: boolean;
+      message: string;
+      simulated?: boolean;
+      otp?: string;
+      twilioCode?: number;
+      fallbackToEmail?: boolean;
+    }>('/api/auth/send-sms-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: clean }),
@@ -40,6 +49,8 @@ export async function sendSMSOTP(phone: string): Promise<{ success: boolean; mes
 
     return {
       success: false,
+      twilioCode: res.data?.twilioCode,
+      fallbackToEmail: res.data?.fallbackToEmail,
       message: res.data?.message || res.error || 'Service SMS temporairement indisponible. Utilisez la connexion par e-mail et mot de passe.',
     };
   } catch (error: any) {

@@ -397,9 +397,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // 9. Change Password
+  // 9. Change Password (Supabase Auth authoritative first, compatible with Vercel serverless)
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!oldPassword) {
+      setMessage({ type: 'error', text: 'Veuillez saisir votre ancien mot de passe.' });
+      return;
+    }
     if (!newPassword || newPassword.length < 6) {
       setMessage({ type: 'error', text: 'Le nouveau mot de passe doit comporter au moins 6 caractères.' });
       return;
@@ -413,36 +417,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setMessage(null);
 
     try {
-      // 1. Verify old password & update via authenticated backend endpoint when session active
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      if (!session?.access_token || !session.user) {
         throw new Error('Session expirée. Veuillez vous reconnecter pour modifier votre mot de passe.');
       }
 
-      const apiRes = await safeFetchJson<{ success: boolean; message?: string }>('/api/auth/change-password', {
+      // 1. Verify old password directly against Supabase Auth when session email is available
+      if (session.user.email) {
+        const { error: reauthErr } = await supabase.auth.signInWithPassword({
+          email: session.user.email,
+          password: oldPassword,
+        });
+        if (reauthErr) {
+          throw new Error('Ancien mot de passe incorrect.');
+        }
+      }
+
+      // 2. Update password directly in Supabase Auth (authoritative across all devices)
+      const { error: supaErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (supaErr) {
+        throw supaErr;
+      }
+
+      // 3. Synchronize server & local credential caches non-blockingly
+      safeFetchJson<{ success: boolean; message?: string }>('/api/auth/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          userId: currentUser?.id,
+          userId: currentUser?.id || session.user.id,
           oldPassword,
           newPassword,
         }),
-      });
+      }).catch(() => {});
 
-      if (!apiRes.ok || !apiRes.data?.success) {
-        throw new Error(apiRes.data?.message || apiRes.error || 'Ancien mot de passe incorrect.');
-      }
-
-      // 2. Sync with Supabase Auth
-      const { error: supaErr } = await supabase.auth.updateUser({ password: newPassword });
-      if (supaErr) {
-        throw supaErr;
-      }
-
-      // 3. Update local client credentials store after server + Supabase confirmation
       if (currentUser?.id) {
         await saveClientPassword(currentUser.id, newPassword, {
           fullName: currentUser.fullName,

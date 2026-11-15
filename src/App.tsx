@@ -84,9 +84,17 @@ export default function App() {
 
   // Supabase Auth Persistence & Session Restoration & Password Recovery
   useEffect(() => {
-    // 0. Detect password recovery link from email
+    // 0. Detect password recovery link (or expired recovery error) from email
     const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
-    if (hash.includes('type=recovery') || hash.includes('reset-password')) {
+    const search = typeof window !== 'undefined' ? window.location.search || '' : '';
+    if (hash.includes('error=') || hash.includes('error_code=') || search.includes('error_code=')) {
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+      appToast('Ce lien de réinitialisation a expiré ou est invalide. Veuillez en demander un nouveau.', 'error');
+      setAuthDefaultMode('LOGIN');
+      setShowAuthModal(true);
+    } else if (hash.includes('type=recovery') || (hash.includes('reset-password') && hash.includes('access_token='))) {
       setAuthDefaultMode('RESET_NEW_PASSWORD');
       setShowAuthModal(true);
     }
