@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StoredUser, CountryCode } from '../types';
 import { setCurrentUser } from '../lib/storage';
-import { sendSMSOTP, verifySMSOTP, supabase } from '../lib/supabase';
+import { sendSMSOTP, verifySMSOTP, supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 import { getProfile, getAccountPhone } from '../lib/supabaseData';
 import { AFRICAN_COUNTRIES } from '../data/countries';
 import { 
@@ -383,20 +383,64 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setIsLoading(true);
       try {
         const fullName = `${firstName.trim()} ${lastName.trim()}`;
-        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: regPassword,
-          options: {
-            data: {
+        // 1) Création d'un compte déjà confirmé via la fonction Supabase « register-user » :
+        //    l'envoi d'e-mails de confirmation de Supabase est limité et bloquait les inscriptions.
+        let createdConfirmed = false;
+        try {
+          const fnRes = await fetch(`${supabaseUrl}/functions/v1/register-user`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify({
+              email: cleanEmail,
+              password: regPassword,
               full_name: fullName,
               city: regCity.trim() || 'Abidjan',
               country: regCountry,
-            },
-          },
-        });
+            }),
+          });
+          const fnData = await fnRes.json().catch(() => null);
+          if (fnRes.ok && fnData?.success) {
+            createdConfirmed = true;
+          } else if ([400, 409, 429].includes(fnRes.status)) {
+            // Réponse définitive (e-mail déjà utilisé, invalide, trop de demandes) : on l'affiche telle quelle.
+            throw Object.assign(new Error(fnData?.message || 'Inscription refusée.'), { definitive: true });
+          }
+        } catch (fnErr: any) {
+          if (fnErr?.definitive) throw fnErr;
+          console.warn('register-user indisponible, repli sur signUp standard:', fnErr?.message);
+        }
 
-        if (signUpErr || !signUpData.user) {
-          throw new Error(signUpErr?.message || 'Erreur lors de la création du compte par e-mail.');
+        let signUpData: { user: any; session: any };
+        if (createdConfirmed) {
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: regPassword,
+          });
+          if (signInErr || !signInData?.session || !signInData.user) {
+            throw new Error('Compte créé, mais la connexion automatique a échoué. Connectez-vous avec votre e-mail et votre mot de passe.');
+          }
+          signUpData = { user: signInData.user, session: signInData.session };
+        } else {
+          const { data: suData, error: signUpErr } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: regPassword,
+            options: {
+              data: {
+                full_name: fullName,
+                city: regCity.trim() || 'Abidjan',
+                country: regCountry,
+              },
+            },
+          });
+
+          if (signUpErr || !suData.user) {
+            throw new Error(signUpErr?.message || 'Erreur lors de la création du compte par e-mail.');
+          }
+          signUpData = { user: suData.user, session: suData.session };
         }
 
         // Create profile in profiles table with phone_verified = false

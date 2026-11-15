@@ -335,8 +335,14 @@ export function generateCandidateEmails(identifier: string): string[] {
     }
   }
 
-  for (const d of digitVariants.slice(0, 2)) {
+  // Chaque tentative échouée compte dans la limite de débit de Supabase (partagée entre
+  // tous les utilisateurs d'un même réseau mobile). On essaie donc d'abord le format
+  // réellement utilisé (indicatif 225 en tête, adresse « phone… »), puis seulement les anciens formats.
+  const orderedVariants = digitVariants.slice(0, 2).sort((a, b) => Number(b.startsWith('225')) - Number(a.startsWith('225')));
+  for (const d of orderedVariants) {
     candidatesSet.add(`phone${d}@afrique-business.app`);
+  }
+  for (const d of orderedVariants) {
     candidatesSet.add(`auth_${d}@afrique-business.internal`);
     candidatesSet.add(`auth_${d}@afrique-business.app`);
   }
