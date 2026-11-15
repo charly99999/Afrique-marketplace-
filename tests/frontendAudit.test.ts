@@ -19,16 +19,16 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
-test('Version 3.0.0 is synchronized across backend, Service Worker, and UI', () => {
+test('Version 3.1.0 is synchronized across backend, Service Worker, and UI', () => {
   const serverCode = fs.readFileSync(path.join(ROOT, 'server.ts'), 'utf-8');
   const swCode = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf-8');
   const regSwCode = fs.readFileSync(path.join(ROOT, 'src/lib/registerServiceWorker.ts'), 'utf-8');
   const settingsCode = fs.readFileSync(path.join(ROOT, 'src/components/SettingsModal.tsx'), 'utf-8');
 
-  assert.match(serverCode, /APP_VERSION\s*=\s*'3\.0\.0'/);
-  assert.match(swCode, /CACHE_NAME\s*=\s*'afrique-business-shell-v3\.0\.0'/);
-  assert.match(regSwCode, /'3\.0\.0'/);
-  assert.match(settingsCode, /Version 3\.0\.0/);
+  assert.match(serverCode, /APP_VERSION\s*=\s*'3\.1\.0'/);
+  assert.match(swCode, /CACHE_NAME\s*=\s*'afrique-business-shell-v3\.1\.0'/);
+  assert.match(regSwCode, /'3\.1\.0'/);
+  assert.match(settingsCode, /Version 3\.1\.0/);
 });
 
 test('Frontend source has zero Unsplash stock fallbacks, native alert/confirm, or service_role keys', () => {

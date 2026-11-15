@@ -298,29 +298,25 @@ export function verifyClientOtp(phone: string, inputCode: string): boolean {
  */
 export function generateCandidateEmails(identifier: string): string[] {
   const trimmed = identifier.trim().toLowerCase();
-  if (trimmed.includes('@')) {
-    return [trimmed];
-  }
-
   const cleanDigits = normalizePhoneDigits(trimmed);
   const candidatesSet = new Set<string>();
 
-  // Admin account emails (supports logging in with backup email OR phone)
-  if (
+  const isAdmin =
+    trimmed === ADMIN_EMAIL.toLowerCase() ||
     cleanDigits === '2250565242349' ||
     cleanDigits === '0565242349' ||
     cleanDigits === '565242349' ||
-    cleanDigits.endsWith('565242349') ||
-    trimmed === ADMIN_EMAIL.toLowerCase()
-  ) {
-    if (trimmed === ADMIN_EMAIL.toLowerCase()) {
-      candidatesSet.add(ADMIN_EMAIL);
-      candidatesSet.add('phone2250565242349@afrique-business.app');
-      candidatesSet.add('auth_2250565242349@afrique-business.internal');
-    } else {
-      candidatesSet.add('phone2250565242349@afrique-business.app');
-      candidatesSet.add(ADMIN_EMAIL);
+    cleanDigits.endsWith('565242349');
+
+  if (isAdmin) {
+    candidatesSet.add('phone2250565242349@afrique-business.app');
+    candidatesSet.add(ADMIN_EMAIL.toLowerCase());
+    candidatesSet.add('auth_2250565242349@afrique-business.internal');
+    if (trimmed.includes('@')) {
+      return Array.from(candidatesSet);
     }
+  } else if (trimmed.includes('@')) {
+    return [trimmed];
   }
 
   // Targeted digit variations actually used by register-user / Supabase signup

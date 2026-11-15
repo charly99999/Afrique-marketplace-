@@ -146,10 +146,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setUpdateCheckMsg('Nouvelle version trouvée ! Redémarrage...');
         await activateWaitingWorkerAndHardReload();
       } else {
-        setUpdateCheckMsg('Votre application est parfaitement à jour (v3.0.0)');
+        setUpdateCheckMsg('Votre application est parfaitement à jour (v3.1.0)');
       }
     } catch {
-      setUpdateCheckMsg('Vérification effectuée. Version actuelle : v3.0.0');
+      setUpdateCheckMsg('Vérification effectuée. Version actuelle : v3.1.0');
     } finally {
       setCheckingUpdate(false);
     }
@@ -841,7 +841,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <span className="font-bold text-[#172033] block">À propos d'Afrique Business</span>
-                      <span className="text-[10px] text-[#596273]">Version 3.0.0 (Blanc & Or), CGU, règles</span>
+                      <span className="text-[10px] text-[#596273]">Version 3.1.0 (Blanc & Or), CGU, règles</span>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-[#596273]" />
@@ -1501,7 +1501,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-extrabold text-white">Afrique Business</h4>
-                  <span className="text-[11px] text-[#D4AF37] font-semibold">Version 3.0.0 (PWA Production)</span>
+                  <span className="text-[11px] text-[#D4AF37] font-semibold">Version 3.1.0 (PWA Production)</span>
                 </div>
               </div>
 

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import http from 'http';
 import crypto from 'crypto';
 import fs from 'fs';
 import { 
@@ -620,7 +621,7 @@ async function resolveSupabaseUserByPhone(phoneInput: string): Promise<{
 }
 
 const SERVER_START_TIME = Date.now();
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.1.0';
 const COMMIT_SHA = process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || 'local';
 
 // Cloud Run / Vercel / Docker / Uptime healthcheck
@@ -1314,11 +1315,14 @@ app.post('/api/auth/resolve-account', async (req, res) => {
     // Check if user has an account in our credentials store
     const localUser = findUserCredential(identifier);
 
-    const candidateEmailsSet = new Set<string>();
-    if (trimmed.includes('@')) {
-      candidateEmailsSet.add(trimmed);
-    }
+    const isAdminIdent =
+      trimmed === ADMIN_EMAIL.toLowerCase() ||
+      cleanDigits === '2250565242349' ||
+      cleanDigits === '0565242349' ||
+      cleanDigits === '565242349' ||
+      cleanDigits.endsWith('565242349');
 
+    const candidateEmailsSet = new Set<string>();
     const digitVariants = new Set<string>();
     if (cleanDigits.length >= 8) {
       digitVariants.add(cleanDigits);
@@ -1330,9 +1334,9 @@ app.post('/api/auth/resolve-account', async (req, res) => {
       }
     }
 
-    // Resolve authoritative email from Supabase Auth FIRST (supports BOTH phone and contact_email logins)
+    // 1. Resolve authoritative email from Supabase Auth FIRST when service role is present
+    let resolvedAuthEmail: string | null = null;
     if (supabaseAdmin) {
-      let resolvedAuthEmail: string | null = null;
       if (cleanDigits.length >= 8 && !trimmed.includes('@')) {
         const resolved = await resolveSupabaseUserByPhone(trimmed);
         if (resolved?.user?.email) {
@@ -1362,28 +1366,24 @@ app.post('/api/auth/resolve-account', async (req, res) => {
           }
         }
       }
+    }
 
-      if (resolvedAuthEmail) {
-        const prev = Array.from(candidateEmailsSet);
-        candidateEmailsSet.clear();
-        candidateEmailsSet.add(resolvedAuthEmail);
-        for (const p of prev) candidateEmailsSet.add(p);
-      }
+    if (resolvedAuthEmail) {
+      candidateEmailsSet.add(resolvedAuthEmail);
+    }
+
+    // 2. Prioritize real phone-auth Supabase email for admin even in stateless serverless environments (Vercel)
+    if (isAdminIdent) {
+      candidateEmailsSet.add('phone2250565242349@afrique-business.app');
+      candidateEmailsSet.add(ADMIN_EMAIL.toLowerCase());
+    }
+
+    if (trimmed.includes('@')) {
+      candidateEmailsSet.add(trimmed);
     }
 
     if (localUser?.email) {
-      candidateEmailsSet.add(localUser.email);
-    }
-
-    if (
-      cleanDigits === '2250565242349' ||
-      cleanDigits === '0565242349' ||
-      cleanDigits === '565242349' ||
-      cleanDigits.endsWith('565242349') ||
-      trimmed === ADMIN_EMAIL.toLowerCase()
-    ) {
-      candidateEmailsSet.add('phone2250565242349@afrique-business.app');
-      candidateEmailsSet.add(ADMIN_EMAIL);
+      candidateEmailsSet.add(localUser.email.toLowerCase());
     }
 
     for (const d of Array.from(digitVariants).slice(0, 2)) {
@@ -2175,12 +2175,17 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Serve static public assets (manifests, icons, offline.html, sw.js)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Setup Vite middleware in dev or static files in prod
+// Setup Vite middleware in dev or static files in prod — le client Vite se connecte via le serveur HTTP Express partage sur le port principal 3000.
 async function startServer() {
+  const httpServer = http.createServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ws: { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -2194,7 +2199,7 @@ async function startServer() {
   // Automatic Facebook Hourly Scheduler is disabled per user request (Manual import only)
   // startFacebookHourlyScheduler();
 
-  const server = app.listen(port, '0.0.0.0', () => {
+  const server = httpServer.listen(port, '0.0.0.0', () => {
     console.log(
       JSON.stringify({
         event: 'server_started',

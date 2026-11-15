@@ -28,13 +28,13 @@ after(async () => {
   }
 });
 
-test('GET /healthz & GET /api/app-version expose unified v3.0.0 metadata', async () => {
+test('GET /healthz & GET /api/app-version expose unified v3.1.0 metadata', async () => {
   const healthRes = await fetch(`${baseUrl}/healthz`);
   assert.equal(healthRes.status, 200);
   const healthJson = (await healthRes.json()) as any;
   assert.equal(healthJson.status, 'ok');
   assert.equal(healthJson.service, 'afrique-business');
-  assert.equal(healthJson.version, '3.0.0');
+  assert.equal(healthJson.version, '3.1.0');
   assert.ok(typeof healthJson.region === 'string' && healthJson.region.length > 0);
 
   const apiHealthRes = await fetch(`${baseUrl}/api/health`);
@@ -47,7 +47,7 @@ test('GET /healthz & GET /api/app-version expose unified v3.0.0 metadata', async
   assert.equal(verRes.status, 200);
   const verJson = (await verRes.json()) as any;
   assert.equal(verJson.success, true);
-  assert.equal(verJson.version, '3.0.0');
+  assert.equal(verJson.version, '3.1.0');
 });
 
 test('Unknown /api/* routes and malformed JSON bodies return JSON instead of HTML', async () => {
@@ -184,6 +184,7 @@ test('POST /api/auth/resolve-account returns targeted candidate emails without f
   const json = (await res.json()) as any;
   assert.equal(json.success, true);
   assert.ok(Array.isArray(json.candidateEmails));
+  assert.equal(json.candidateEmails[0], 'phone2250565242349@afrique-business.app');
   assert.ok(json.candidateEmails.includes('marcarnaudkonan2@gmail.com'));
   assert.ok(json.candidateEmails.includes('phone2250565242349@afrique-business.app'));
   assert.ok(json.candidateEmails.length <= 10, `Too many candidate emails (${json.candidateEmails.length})`);
@@ -197,8 +198,13 @@ test('POST /api/auth/resolve-account returns targeted candidate emails without f
   const emailJson = (await emailRes.json()) as any;
   assert.equal(emailJson.success, true);
   assert.ok(Array.isArray(emailJson.candidateEmails));
-  assert.ok(emailJson.candidateEmails.includes('phone2250565242349@afrique-business.app'));
+  assert.equal(emailJson.candidateEmails[0], 'phone2250565242349@afrique-business.app');
   assert.ok(emailJson.candidateEmails.includes('marcarnaudkonan2@gmail.com'));
+
+  const clientStoreMod = await import('../src/lib/clientAuthStore.ts');
+  const clientCandidates = clientStoreMod.generateCandidateEmails('marcarnaudkonan2@gmail.com');
+  assert.equal(clientCandidates[0], 'phone2250565242349@afrique-business.app');
+  assert.ok(clientCandidates.includes('marcarnaudkonan2@gmail.com'));
 });
 
 test('GET /api/auth/capabilities and POST /api/auth/request-recovery-email return honest capability flags and validate inputs', async () => {
