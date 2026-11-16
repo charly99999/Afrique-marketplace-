@@ -342,31 +342,97 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Branch A: Phone Registration with SMS code verification via Twilio
+    // Branch A: Phone Registration — création directe SANS code SMS.
+    // L'envoi de SMS via Twilio est bloqué (compte limité), donc le compte est créé
+    // confirmé via la même fonction « register-user » que l'inscription e-mail,
+    // avec l'adresse interne du numéro : phone<indicatif+numéro>@afrique-business.app
+    // (exactement le format que la connexion essaie en premier).
     if (regType === 'phone') {
-      const cleanPhone = regPhone.trim();
+      const cleanPhone = regPhone.trim().replace(/[\s\-\(\)]/g, '');
       const phoneRegex = /^\+?[0-9]{8,15}$/;
-      if (!cleanPhone || !phoneRegex.test(cleanPhone.replace(/[\s\-\(\)]/g, ''))) {
+      if (!cleanPhone || !phoneRegex.test(cleanPhone)) {
         setErrorMsg('Veuillez saisir un numéro de téléphone valide avec indicatif pays (ex: +2250707070707).');
         return;
       }
 
+      const digits = cleanPhone.replace(/\D/g, '');
+      const intlDigits = digits.startsWith('225')
+        ? digits
+        : digits.startsWith('0') && digits.length === 10
+          ? '225' + digits.slice(1)
+          : digits;
+      const loginEmail = `phone${intlDigits}@afrique-business.app`;
+      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      const fullPhone = `+${intlDigits}`;
+
       setIsLoading(true);
-      setTargetPhone(cleanPhone);
+      try {
+        const fnRes = await fetch(`${supabaseUrl}/functions/v1/register-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            email: loginEmail,
+            password: regPassword,
+            full_name: fullName,
+            city: regCity.trim() || 'Abidjan',
+            country: regCountry,
+          }),
+        });
+        const fnData = await fnRes.json().catch(() => null);
+        if (!fnRes.ok || !fnData?.success) {
+          throw new Error(fnData?.message || 'Inscription refusée : ce numéro est peut-être déjà utilisé.');
+        }
 
-      const result = await sendSMSOTP(cleanPhone);
-      setIsLoading(false);
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: regPassword,
+        });
+        if (signInErr || !signInData?.session || !signInData.user) {
+          throw new Error('Compte créé, mais la connexion automatique a échoué. Connectez-vous avec votre numéro et votre mot de passe.');
+        }
 
-      if (result.success) {
-        setSmsFallbackPhone(null);
-        setCountdown(60);
-        setSmsSource('register');
-        setSimulatedCode(result.simulated && result.otp ? result.otp : null);
-        setSuccessMsg('Un code de confirmation SMS a été envoyé à votre numéro.');
-        setMode('SMS_VERIFY');
-      } else {
-        setSmsFallbackPhone(result.fallbackToEmail ? cleanPhone : null);
-        setErrorMsg(result.message || 'Impossible d’envoyer le SMS. Vérifiez votre numéro.');
+        const uid = signInData.user.id;
+        await supabase.from('profiles').upsert({
+          id: uid,
+          full_name: fullName,
+          city: regCity.trim() || 'Abidjan',
+          country: regCountry,
+          phone_verified: false,
+        });
+        await supabase.from('profile_private').upsert({ id: uid, phone: fullPhone });
+        await saveClientPassword(uid, regPassword, {
+          fullName,
+          phone: fullPhone,
+          email: loginEmail,
+        });
+
+        const newUser: StoredUser = {
+          id: uid,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          fullName,
+          phone: fullPhone,
+          country: regCountry,
+          city: regCity.trim() || 'Abidjan',
+          phone_verified: false,
+          activeRole: 'BUYER',
+          kycLevel: 1,
+          trustScore: 5.0,
+          walletBalance: 0,
+          registeredAt: new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+        };
+        setCurrentUser(newUser);
+        onAuthSuccess(newUser);
+        onClose();
+      } catch (err: any) {
+        console.error('Phone registration error:', err);
+        setErrorMsg(err.message || 'Erreur lors de l’inscription par numéro.');
+      } finally {
+        setIsLoading(false);
       }
       return;
     }
@@ -1260,13 +1326,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   />
                 </div>
                 <span className="text-[10px] text-[#596273] mt-1 block">
-                  Un code SMS de vérification sécurisé vous sera envoyé par Twilio.
+                  Inscription immédiate, sans code SMS : votre numéro devient votre identifiant de connexion.
                 </span>
-                {capabilities && !capabilities.smsEnabled && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-[#C69A35]/40 text-[11px] text-[#8C6815]">
-                    La passerelle SMS Twilio n’est pas active sur ce serveur. Privilégiez l’onglet « Par E-mail ».
-                  </div>
-                )}
               </div>
             ) : (
               <div>
@@ -1347,11 +1408,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               disabled={isLoading}
               className="w-full py-3.5 rounded-xl bg-linear-to-r from-[#C69A35] to-[#E7C875] text-[#172033] text-xs font-black hover:brightness-105 active:scale-99 transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
-              {isLoading
-                ? 'Traitement...'
-                : regType === 'phone'
-                ? 'Continuer et recevoir le code SMS'
-                : 'Créer mon compte'}
+              {isLoading ? 'Traitement...' : 'Créer mon compte'}
             </button>
 
             <div className="pt-2 text-center text-xs">
