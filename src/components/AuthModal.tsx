@@ -343,10 +343,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Branch A: Phone Registration — création directe SANS code SMS.
-    // L'envoi de SMS via Twilio est bloqué (compte limité), donc le compte est créé
-    // confirmé via la même fonction « register-user » que l'inscription e-mail,
-    // avec l'adresse interne du numéro : phone<indicatif+numéro>@afrique-business.app
-    // (exactement le format que la connexion essaie en premier).
+    // L'envoi de SMS via Twilio est bloqué (compte limité) : le serveur crée le
+    // compte directement (endpoint /api/auth/register-phone-direct), avec
+    // l'adresse interne phone<indicatif+numéro>@afrique-business.app — exactement
+    // le format que la connexion essaie en premier. Aucun code SMS n'est demandé.
     if (regType === 'phone') {
       const cleanPhone = regPhone.trim().replace(/[\s\-\(\)]/g, '');
       const phoneRegex = /^\+?[0-9]{8,15}$/;
@@ -355,38 +355,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
-      const digits = cleanPhone.replace(/\D/g, '');
-      const intlDigits = digits.startsWith('225')
-        ? digits
-        : digits.startsWith('0') && digits.length === 10
-          ? '225' + digits.slice(1)
-          : digits;
-      const loginEmail = `phone${intlDigits}@afrique-business.app`;
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
-      const fullPhone = `+${intlDigits}`;
-
       setIsLoading(true);
       try {
-        const fnRes = await fetch(`${supabaseUrl}/functions/v1/register-user`, {
+        const regRes = await safeFetchJson<{
+          success: boolean;
+          supabaseSynced?: boolean;
+          userId?: string;
+          loginEmail?: string;
+          message?: string;
+        }>('/api/auth/register-phone-direct', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: loginEmail,
+            phone: cleanPhone,
             password: regPassword,
-            full_name: fullName,
+            fullName,
             city: regCity.trim() || 'Abidjan',
             country: regCountry,
           }),
         });
-        const fnData = await fnRes.json().catch(() => null);
-        if (!fnRes.ok || !fnData?.success) {
-          throw new Error(fnData?.message || 'Inscription refusée : ce numéro est peut-être déjà utilisé.');
+
+        if (!regRes.ok || !regRes.data?.success || !regRes.data.userId || !regRes.data.loginEmail) {
+          throw new Error(regRes.data?.message || regRes.error || 'Échec de l’inscription par numéro.');
         }
 
+        const loginEmail = regRes.data.loginEmail;
         const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
           email: loginEmail,
           password: regPassword,
@@ -396,17 +390,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
 
         const uid = signInData.user.id;
-        await supabase.from('profiles').upsert({
-          id: uid,
-          full_name: fullName,
-          city: regCity.trim() || 'Abidjan',
-          country: regCountry,
-          phone_verified: false,
-        });
-        await supabase.from('profile_private').upsert({ id: uid, phone: fullPhone });
         await saveClientPassword(uid, regPassword, {
           fullName,
-          phone: fullPhone,
+          phone: cleanPhone,
           email: loginEmail,
         });
 
@@ -415,7 +401,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           fullName,
-          phone: fullPhone,
+          phone: cleanPhone,
           country: regCountry,
           city: regCity.trim() || 'Abidjan',
           phone_verified: false,

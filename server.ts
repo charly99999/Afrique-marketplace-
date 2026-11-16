@@ -1060,6 +1060,152 @@ app.post('/api/auth/register-user', async (req, res) => {
   }
 });
 
+// 3b. Direct phone registration WITHOUT SMS OTP.
+// Twilio delivery is blocked (limited account), so phone signups that required
+// an SMS code could never complete. This endpoint provisions the account
+// directly (same provisioning as the OTP flow, minus the code check):
+// the phone number stays marked as NOT verified.
+app.post('/api/auth/register-phone-direct', async (req, res) => {
+  try {
+    const { phone, password, fullName, city, country } = req.body;
+    if (!phone || !password || !fullName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Informations incomplètes (téléphone, mot de passe et nom requis).',
+      });
+    }
+
+    if (String(password).length < 6 || String(password).length > 100) {
+      return res.status(400).json({ success: false, message: 'Le mot de passe doit comporter entre 6 et 100 caractères.' });
+    }
+
+    const clientIp = getClientIp(req);
+    if (!checkRateLimit(`ip_register_${clientIp}`, 10, 10 * 60 * 1000)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Trop de demandes d’inscription depuis votre adresse. Veuillez patienter 10 minutes.',
+      });
+    }
+
+    const cleanPhone = String(phone).replace(/[\s\-\(\)]/g, '');
+    if (!isValidPhoneNumber(cleanPhone)) {
+      return res.status(400).json({ success: false, message: 'Numéro de téléphone invalide.' });
+    }
+
+    // Prevent account overwrite if phone already registered (check Supabase AND local store)
+    const existingSupa = await resolveSupabaseUserByPhone(cleanPhone);
+    const existingCred = findUserCredential(cleanPhone);
+    if (existingSupa || existingCred) {
+      return res.status(409).json({
+        success: false,
+        message: 'Un compte existe déjà avec ce numéro de téléphone. Veuillez vous connecter ou réinitialiser votre mot de passe.',
+      });
+    }
+
+    if (!supabaseAdmin) {
+      return res.status(503).json({
+        success: false,
+        message: 'Service d’inscription temporairement indisponible. Veuillez utiliser l’inscription par e-mail.',
+      });
+    }
+
+    // Canonical login e-mail for the number: phone<225 + numéro>@afrique-business.app
+    // (the exact format sign-in tries first for phone numbers).
+    const rawDigits = cleanPhone.replace(/[^\d]/g, '');
+    let intlDigits = rawDigits;
+    if (!intlDigits.startsWith('225') && intlDigits.length <= 10) {
+      intlDigits = intlDigits.startsWith('0') ? '225' + intlDigits.slice(1) : '225' + intlDigits;
+    }
+    const internalEmail = `phone${intlDigits}@afrique-business.app`;
+    const cleanFullName = sanitizeText(fullName, 100) || 'Utilisateur';
+    const cleanCity = sanitizeText(city || 'Abidjan', 60) || 'Abidjan';
+    const cleanCountry = sanitizeText(country || 'CI', 5) || 'CI';
+
+    // 1. Register in server credential store
+    const userCred = registerUserCredential({
+      phone: cleanPhone,
+      email: internalEmail,
+      password,
+      fullName: cleanFullName,
+      city: cleanCity,
+      country: cleanCountry,
+    });
+    const userId = userCred.userId;
+
+    // 2. Create the confirmed Supabase Auth user + profiles (phone NOT verified: no SMS proof)
+    let supabaseSynced = false;
+    try {
+      const { error: adminCreateErr } = await supabaseAdmin.auth.admin.createUser({
+        id: userId,
+        email: internalEmail,
+        email_confirm: true,
+        password: password,
+        user_metadata: {
+          full_name: cleanFullName,
+          city: cleanCity,
+          country: cleanCountry,
+          phone: cleanPhone,
+        },
+      });
+      if (!adminCreateErr) {
+        supabaseSynced = true;
+        await supabaseAdmin.from('profiles').upsert({
+          id: userId,
+          full_name: cleanFullName,
+          city: cleanCity,
+          country: cleanCountry,
+          phone_verified: false,
+        });
+        await supabaseAdmin.from('profile_private').upsert({
+          id: userId,
+          phone: cleanPhone,
+        });
+      } else {
+        console.warn('Admin auth creation (direct) warning:', adminCreateErr);
+      }
+    } catch (adminErr) {
+      console.warn('Admin auth creation (direct) warning:', adminErr);
+    }
+
+    if (!supabaseSynced) {
+      return res.status(503).json({
+        success: false,
+        message: 'La création du compte a échoué côté serveur. Veuillez réessayer ou utiliser l’inscription par e-mail.',
+      });
+    }
+
+    const nameParts = cleanFullName.split(' ');
+    return res.json({
+      success: true,
+      supabaseSynced,
+      userId,
+      loginEmail: internalEmail,
+      phone: cleanPhone,
+      fullName: cleanFullName,
+      city: cleanCity,
+      country: cleanCountry,
+      user: {
+        id: userId,
+        fullName: cleanFullName,
+        firstName: nameParts[0] || cleanFullName,
+        lastName: nameParts.slice(1).join(' ') || '',
+        phone: cleanPhone,
+        email: internalEmail,
+        city: cleanCity,
+        country: cleanCountry,
+        phone_verified: false,
+        activeRole: 'BUYER',
+        kycLevel: 1,
+        trustScore: 5.0,
+        walletBalance: 0,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error in /api/auth/register-phone-direct:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Erreur serveur lors de l’inscription' });
+  }
+});
+
 // 4. Reset password via SMS OTP (Works 100% reliably)
 app.post('/api/auth/reset-password-sms', async (req, res) => {
   try {
